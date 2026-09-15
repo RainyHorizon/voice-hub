@@ -1,4 +1,4 @@
-﻿param(
+param(
   [ValidateRange(1, 65535)]
   [int]$Port = 0,
   [switch]$OpenBrowser,
@@ -16,7 +16,7 @@ $requirementsFile = Join-Path $backendRoot "requirements.txt"
 $requirementsStamp = Join-Path $backendRoot ".venv\.requirements.sha256"
 
 function Write-Step([string]$Message) {
-  Write-Host "[Voice Studio] $Message" -ForegroundColor Cyan
+  Write-Host "[VoxNest] $Message" -ForegroundColor Cyan
 }
 
 function Test-PortAvailable([int]$Candidate) {
@@ -32,7 +32,7 @@ function Test-PortAvailable([int]$Candidate) {
   }
 }
 
-function Test-VoiceStudio([int]$Candidate) {
+function Test-VoxNest([int]$Candidate) {
   try {
     $response = Invoke-RestMethod -Uri "http://127.0.0.1:$Candidate/api/summary" -TimeoutSec 2
     return $response.application -eq "voice-studio"
@@ -57,7 +57,7 @@ function Get-CommandVersion([string]$Command, [string[]]$Arguments) {
 
 try {
   Write-Host ""
-  Write-Host "Voice Studio Windows 启动检查" -ForegroundColor Green
+  Write-Host "VoxNest Windows 启动检查" -ForegroundColor Green
   Write-Host "--------------------------------"
 
   $pythonCommand = Get-Command python -ErrorAction SilentlyContinue
@@ -86,9 +86,9 @@ try {
   }
   if ($Port -eq 0) { $Port = 8765 }
 
-  if (Test-VoiceStudio $Port) {
+  if (Test-VoxNest $Port) {
     $existingUrl = "http://127.0.0.1:$Port"
-    Write-Host "Voice Studio 已在运行：$existingUrl" -ForegroundColor Green
+    Write-Host "VoxNest 已在运行：$existingUrl" -ForegroundColor Green
     if ($OpenBrowser) { Start-Process $existingUrl }
     exit 0
   }
@@ -96,7 +96,7 @@ try {
     if ($portWasExplicit) { throw "端口 $Port 已被其他程序占用。请关闭占用程序，或使用 .\start.ps1 -Port 8766。" }
     $availablePort = 8766..8790 | Where-Object { Test-PortAvailable $_ } | Select-Object -First 1
     if (-not $availablePort) { throw "端口 8765–8790 均不可用，请关闭占用端口的程序后重试。" }
-    Write-Host "[Voice Studio] 端口 8765 已被占用，自动改用 $availablePort。" -ForegroundColor Yellow
+    Write-Host "[VoxNest] 端口 8765 已被占用，自动改用 $availablePort。" -ForegroundColor Yellow
     $Port = $availablePort
   } else {
     Write-Step "端口 $Port 可用"
@@ -165,15 +165,16 @@ try {
     } -ArgumentList $voiceStudioUrl
   }
   Write-Host ""
-  Write-Host "Voice Studio 已准备完成：$voiceStudioUrl" -ForegroundColor Green
+  Write-Host "VoxNest 已准备完成：$voiceStudioUrl" -ForegroundColor Green
   Write-Host "关闭此窗口即可停止服务。" -ForegroundColor DarkGray
   & $pythonExecutable -m uvicorn app.main:app --app-dir $backendRoot --host 127.0.0.1 --port $Port
 } catch {
   Write-Host ""
-  Write-Host "Voice Studio 启动失败" -ForegroundColor Red
+  Write-Host "VoxNest 启动失败" -ForegroundColor Red
   Write-Host $_.Exception.Message -ForegroundColor Yellow
   Write-Host ""
-  Write-Host "修复后重新双击“启动 Voice Studio.bat”。" -ForegroundColor DarkGray
+  Write-Host "修复后重新双击“启动 VoxNest.bat”。" -ForegroundColor DarkGray
   if ($PauseOnError) { Read-Host "按 Enter 键关闭窗口" | Out-Null }
   exit 1
 }
+

@@ -1,8 +1,8 @@
-# Voice Studio
+# VoxNest
 
-Voice Studio 是一个本地运行的多厂商 AI 语音工作台。它把通义千问、火山引擎、MiniMax 和小米 MiMo 的语音能力集中在一个网页界面中，并提供 OpenAI 兼容 API，方便其他应用调用。
+VoxNest 是一个本地运行的多厂商 AI 语音工作台。它把通义千问、火山引擎、MiniMax 和小米 MiMo 的语音能力集中在一个网页界面中，并提供 OpenAI 兼容 API，方便其他应用调用。
 
-API Key、音频、任务历史和音色信息默认保存在本机，不会上传到 Voice Studio 服务端。
+API Key、音频、任务历史和音色信息默认保存在本机，不会上传到 VoxNest 服务端。
 
 ## 主要功能
 
@@ -41,19 +41,27 @@ API Key、音频、任务历史和音色信息默认保存在本机，不会上�
 
 ### Windows 便携版
 
-1. 在 [Releases](https://github.com/RainyHorizon/voice-studio/releases) 下载 `Voice-Studio-*-Windows-Portable.zip`。
+1. 在 [Releases](https://github.com/RainyHorizon/voice-studio/releases) 下载 `VoxNest-*-Windows-Portable.zip`。
 2. 将压缩包完整解压到有写入权限的普通文件夹，不要直接在压缩包预览窗口中运行。
-3. 双击 `启动 Voice Studio.bat`。
+3. 双击 `启动 VoxNest.bat`。
 4. 浏览器打开启动器显示的地址，默认是 `http://127.0.0.1:8765`。
-5. 使用完毕后双击 `停止 Voice Studio.bat`；它会自动识别并停止 Voice Studio 使用的本地端口。
+5. 使用完毕后双击 `停止 VoxNest.bat`；它会自动识别并停止 VoxNest 使用的本地端口。
 
 便携版包含运行所需的 Python、后端依赖、前端文件、FFmpeg 和 FFprobe。数据库、音频和网关配置保存在程序目录的 `data` 文件夹中。升级时请保留这个文件夹。
 
-从首个包含自动更新器的版本开始，可先关闭 Voice Studio，再双击 `更新 Voice Studio.bat`。更新器会自动识别 Portable、Windows 轻量版或 Git 源码目录，并选择对应的安全更新方式。更早的便携版需要先手动升级一次。
+从首个包含自动更新器的版本开始，可先关闭 VoxNest，再双击 `更新 VoxNest.bat`。更新器会自动识别 Portable、Windows 轻量版或 Git 源码目录，并选择对应的安全更新方式。更早的便携版需要先手动升级一次。
 
 ### Windows 轻量版
 
-在 Releases 下载 `Voice-Studio-*-Windows.zip` 并完整解压，安装 Python 3.11+ 和 FFmpeg 后，双击 `启动 Voice Studio.bat`。使用完毕后可双击 `停止 Voice Studio.bat`。轻量版已包含预构建前端，通常不需要安装 Node.js。
+在 Releases 下载 `VoxNest-*-Windows.zip` 并完整解压，安装 Python 3.11+ 和 FFmpeg 后，双击 `启动 VoxNest.bat`。使用完毕后可双击 `停止 VoxNest.bat`。轻量版已包含预构建前端，通常不需要安装 Node.js。
+
+### Windows 安装版（EXE）
+
+Release 同时提供 `VoxNest-*-Windows-Setup.exe`。它是 Inno Setup 安装包，默认安装到当前用户的 `%LOCALAPPDATA%\VoxNest`，不需要管理员权限，并创建开始菜单和桌面快捷方式。安装包内包含独立 Python、FFmpeg、FFprobe 和前端文件，用户不需要另行安装运行环境。`data` 和系统密钥环中的 API Key 会保留在升级过程中。
+
+安装版与便携版使用相同的程序核心；升级时可以运行新版 Setup 覆盖安装。当前目录更新器会轮询 GitHub 并下载、校验 Portable 包后替换程序文件。首次安装后，Windows 客户端只能通过“检查更新”或启动时轮询发现新版本，GitHub 无法直接向离线客户端推送进程消息。
+
+如果之后把 GitHub 仓库从 `RainyHorizon/voice-studio` 重命名为 `RainyHorizon/voxnest`，需要同步修改 `update.ps1`、`update.sh`、README、Docker Compose 镜像地址和安装包中的项目主页；GitHub 通常会自动重定向旧仓库地址，但更新器的仓库白名单仍应显式切换。
 
 ### Windows 源码启动
 
@@ -90,14 +98,17 @@ chmod +x start.sh
 
 `start.sh` 会自动创建 `backend/.venv`、安装后端依赖，并在需要时构建前端。
 
+项目 CI 会在真实 macOS Runner 上读写并删除一条临时 Keychain 凭据，也会在 Ubuntu Runner 的临时 D-Bus 会话中验证 GNOME Keyring/Secret Service。该检查覆盖系统密钥环适配路径，但无法代替用户电脑上的桌面会话、锁屏状态和钱包解锁验证；遇到诊断异常时仍应在实际安装环境运行一次设置页检查。
+
 ## 更新
 
 | 当前安装方式 | 更新入口 | 更新来源 |
 | --- | --- | --- |
-| Windows Portable | 双击 `更新 Voice Studio.bat` | 最新正式版 Portable ZIP |
-| Windows 轻量版 | 双击 `更新 Voice Studio.bat` | 最新正式版 Windows ZIP |
-| Windows Git 源码 | 双击 `更新 Voice Studio.bat` | 当前分支的上游 Git 分支 |
-| Windows Source ZIP | 双击 `更新 Voice Studio.bat` | 最新正式版 Windows ZIP |
+| Windows Portable | 双击 `更新 VoxNest.bat` | 最新正式版 Portable ZIP |
+| Windows 安装版 | 运行新版 Setup 或安装目录中的更新器 | 最新正式版 Setup/Portable |
+| Windows 轻量版 | 双击 `更新 VoxNest.bat` | 最新正式版 Windows ZIP |
+| Windows Git 源码 | 双击 `更新 VoxNest.bat` | 当前分支的上游 Git 分支 |
+| Windows Source ZIP | 双击 `更新 VoxNest.bat` | 最新正式版 Windows ZIP |
 | macOS / Linux Release 包 | `bash update.sh` | 对应系统的最新正式版 TAR 包 |
 | macOS / Linux Git 源码 | `bash update.sh` | 当前分支的上游 Git 分支 |
 | macOS / Linux Source ZIP | `bash update.sh` | 对应系统的最新正式版 TAR 包 |
@@ -129,7 +140,7 @@ cp .env.example .env
 ```bash
 docker compose up -d
 docker compose ps
-docker compose logs -f voice-studio
+docker compose logs -f voxnest
 ```
 
 默认地址为 `http://127.0.0.1:8765`。停止服务但保留 `data` 数据：
@@ -178,6 +189,7 @@ Docker 可用变量：
 | `VOICE_STUDIO_VOLCENGINE_PROJECT_NAME` | 火山引擎默认项目名称（可选；桌面版可在设置中同步并管理多个项目） |
 | `VOICE_STUDIO_MINIMAX_API_KEY` | MiniMax API Key |
 | `VOICE_STUDIO_MIMO_API_KEY` | 小米 MiMo API Key |
+| `VOICE_STUDIO_MAX_CONCURRENT_SYNTHESIS` | 同时生成语音的上限，默认 4，最大 32 |
 
 火山引擎的语音 API Key 与云端音色同步使用的 Access Key/Secret Key 是两组不同凭据。不使用云端音色同步时，后两项可以留空。桌面版只需配置一套火山凭据，然后在 **设置 → 火山引擎 → 项目** 中点击“同步项目与密钥”；程序会用 AK/SK 读取每个项目已有的语音 API Key，并将密钥本体保存到系统密钥环。之后声音克隆、云端音色同步和空槽位查询都会按所选项目执行，不需要为每个项目重复添加账号。没有 IAM 项目读取权限时，也可以手动添加 `ProjectName`，但需要在控制台为该项目创建 API Key 后再同步。`.env` 只保存在本机，不要提交到 GitHub。
 
@@ -194,6 +206,8 @@ http://127.0.0.1:8765/v1
 ```http
 Authorization: Bearer <Gateway Key>
 ```
+
+管理接口默认只返回脱敏的 Gateway Key；本机网页在明确请求查看时才会读取完整 Key。远程部署不要依赖 `/api/gateway` 自动获取密钥，应通过部署环境安全地注入并保存 Gateway Key。
 
 | 接口 | 方法 | 用途 |
 | --- | --- | --- |
@@ -216,7 +230,7 @@ client = OpenAI(
 with client.audio.speech.with_streaming_response.create(
     model="tts-default",
     voice="mimo-default",
-    input="你好，这是 Voice Studio 生成的语音。",
+    input="你好，这是 VoxNest 生成的语音。",
     response_format="mp3",
 ) as response:
     response.stream_to_file("speech.mp3")
@@ -236,7 +250,7 @@ const client = new OpenAI({
 const response = await client.audio.speech.create({
   model: "tts-default",
   voice: "mimo-default",
-  input: "你好，这是 Voice Studio 生成的语音。",
+  input: "你好，这是 VoxNest 生成的语音。",
   response_format: "mp3",
 });
 
@@ -252,6 +266,7 @@ await writeFile("speech.mp3", Buffer.from(await response.arrayBuffer()));
 | 生成音频、参考音频 | `data/audio` |
 | 任务、音色和账号元数据 | `data/voice_studio.db` |
 | 本地 Gateway Key | `data/gateway.json`（Docker 优先使用环境变量） |
+| 运行日志 | `data/logs/` |
 
 在 **设置 → 存储与清理** 中可以配置自动清理、音频保留天数、容量上限和检查周期。需要长期保存时，先在 **任务历史** 导出文字和音频，再启用自动清理。
 
@@ -260,7 +275,7 @@ PCM 是不带文件头的原始音频数据，浏览器通常无法直接播放�
 ## 安全提示
 
 - 厂商密钥默认保存在系统密钥环，不写入 SQLite、前端文件或 Git。
-- 页面只显示脱敏后的密钥，浏览器不会直接请求厂商 API。
+- 页面默认显示脱敏密钥；只有本机管理界面明确查看时才读取完整 Gateway Key，浏览器不会直接请求厂商 API。
 - 服务默认只监听 `127.0.0.1`。不要在没有 HTTPS、访问控制和限流的情况下暴露到公网。
 - Gateway Key 具有调用已配置付费语音接口的权限，请像保护厂商 API Key 一样保护它。
 - Docker 使用 `.env` 或平台 Secret 注入密钥；不要提交 `.env`、数据库、音频和日志。
@@ -290,6 +305,8 @@ PCM 是不带文件头的原始音频数据，浏览器通常无法直接播放�
 # 前端
 Set-Location frontend
 npm ci
+npm run lint
+npm test
 npm run build
 
 # 后端测试
@@ -311,4 +328,4 @@ python -m pytest -q tests
 
 ## 许可证
 
-本项目基于 [MIT License](LICENSE) 开源。第三方依赖及其许可证见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+本项目基于 [MIT License](LICENSE) 开源。第三方依赖及其许可证见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。\n

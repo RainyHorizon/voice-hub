@@ -1,4 +1,4 @@
-﻿param(
+param(
   [string]$InstallDirectory = "",
   [switch]$CheckOnly,
   [switch]$Yes
@@ -10,7 +10,7 @@ $repository = "RainyHorizon/voice-studio"
 $managedManifestName = ".voice-studio-files.txt"
 
 function Write-Step([string]$Message) {
-  Write-Host "[Voice Studio] $Message" -ForegroundColor Cyan
+  Write-Host "[VoxNest] $Message" -ForegroundColor Cyan
 }
 
 function Resolve-InstallDirectory([string]$Directory) {
@@ -33,20 +33,20 @@ function Get-InstallType([string]$Root) {
       (Test-Path -LiteralPath (Join-Path $Root "start.ps1") -PathType Leaf)) {
     return "git"
   }
-  if (Test-Path -LiteralPath (Join-Path $Root "VoiceStudio.exe") -PathType Leaf) {
+  if (Test-Path -LiteralPath (Join-Path $Root "VoxNest.exe") -PathType Leaf) {
     return "portable"
   }
   if ((Test-Path -LiteralPath (Join-Path $Root "start.ps1") -PathType Leaf) -and
       (Test-Path -LiteralPath (Join-Path $Root "backend\app") -PathType Container)) {
     return "windows"
   }
-  throw "无法识别当前安装类型。请确认更新文件位于 Voice Studio 的程序根目录。"
+  throw "无法识别当前安装类型。请确认更新文件位于 VoxNest 的程序根目录。"
 }
 
 function Get-LatestRelease {
   $headers = @{
     Accept = "application/vnd.github+json"
-    "User-Agent" = "Voice-Studio-Updater"
+    "User-Agent" = "VoxNest-Updater"
     "X-GitHub-Api-Version" = "2022-11-28"
   }
   return Invoke-RestMethod `
@@ -110,10 +110,10 @@ function Assert-ZipEntriesAreSafe([string]$ArchivePath, [string]$Destination) {
   }
 }
 
-function Get-RunningVoiceStudio([string]$Root) {
+function Get-RunningVoxNest([string]$Root) {
   $rootPrefix = [System.IO.Path]::GetFullPath($Root).TrimEnd('\') + '\'
   $processes = @(
-    Get-Process -Name "VoiceStudio" -ErrorAction SilentlyContinue | Where-Object {
+    Get-Process -Name "VoxNest" -ErrorAction SilentlyContinue | Where-Object {
       try {
         $_.Path -and $_.Path.StartsWith($rootPrefix, [System.StringComparison]::OrdinalIgnoreCase)
       } catch {
@@ -136,20 +136,20 @@ function Get-RunningVoiceStudio([string]$Root) {
   return @($processes)
 }
 
-function Confirm-VoiceStudioStopped([string]$Root) {
-  if ((Get-RunningVoiceStudio $Root).Count -eq 0) { return }
-  Write-Host "请先关闭正在运行的 Voice Studio 启动窗口。" -ForegroundColor Yellow
+function Confirm-VoxNestStopped([string]$Root) {
+  if ((Get-RunningVoxNest $Root).Count -eq 0) { return }
+  Write-Host "请先关闭正在运行的 VoxNest 启动窗口。" -ForegroundColor Yellow
   if (-not $Yes) { $null = Read-Host "关闭后按 Enter 继续" }
-  if ((Get-RunningVoiceStudio $Root).Count -gt 0) {
-    throw "Voice Studio 仍在运行。更新没有修改任何文件。"
+  if ((Get-RunningVoxNest $Root).Count -gt 0) {
+    throw "VoxNest 仍在运行。更新没有修改任何文件。"
   }
 }
 
-function Start-VoiceStudio([string]$Root) {
+function Start-VoxNest([string]$Root) {
   if ($Yes) { return }
-  $launcher = Join-Path $Root "启动 Voice Studio.bat"
+  $launcher = Join-Path $Root "启动 VoxNest.bat"
   if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) { return }
-  $answer = Read-Host "现在启动 Voice Studio？输入 Y 启动，输入其他内容退出"
+  $answer = Read-Host "现在启动 VoxNest？输入 Y 启动，输入其他内容退出"
   if ($answer -match '^(?i)y(es)?$') {
     Start-Process -FilePath "cmd.exe" -ArgumentList @("/c", "`"$launcher`"") -WorkingDirectory $Root
   }
@@ -178,7 +178,7 @@ function Update-GitCheckout([string]$Root) {
 
   $remoteUrl = [string](Invoke-Git $git.Source $Root @("remote", "get-url", "origin") | Select-Object -First 1)
   if ($remoteUrl.Trim() -notmatch '^(?i)(https://github\.com/RainyHorizon/voice-studio(?:\.git)?|git@github\.com:RainyHorizon/voice-studio(?:\.git)?|ssh://git@github\.com/RainyHorizon/voice-studio(?:\.git)?)$') {
-    throw "origin 不是 Voice Studio 官方仓库，更新器不会自动拉取：$($remoteUrl.Trim())"
+    throw "origin 不是 VoxNest 官方仓库，更新器不会自动拉取：$($remoteUrl.Trim())"
   }
 
   $branch = ([string](Invoke-Git $git.Source $Root @("branch", "--show-current") | Select-Object -First 1)).Trim()
@@ -223,14 +223,14 @@ function Update-GitCheckout([string]$Root) {
     }
   }
 
-  Confirm-VoiceStudioStopped $Root
+  Confirm-VoxNestStopped $Root
   Write-Step "正在快进更新 Git 源码..."
   $pullOutput = Invoke-Git $git.Source $Root @("pull", "--ff-only")
   $pullOutput | ForEach-Object { Write-Host $_ }
   $commit = ([string](Invoke-Git $git.Source $Root @("rev-parse", "--short", "HEAD") | Select-Object -First 1)).Trim()
   Write-Host "Git 源码已更新，当前提交：$commit" -ForegroundColor Green
   Write-Host "下次启动时会自动检查前端与 Python 依赖。"
-  Start-VoiceStudio $Root
+  Start-VoxNest $Root
 }
 
 function Install-ReleaseFiles([string]$PackageRoot, [string]$InstallRoot, [string]$BackupRoot, [string]$ExpectedVersion, [string]$InstallType) {
@@ -273,7 +273,7 @@ function Install-ReleaseFiles([string]$PackageRoot, [string]$InstallRoot, [strin
       }
     }
 
-    $requiredExecutable = if ($InstallType -eq "portable") { "VoiceStudio.exe" } else { "start.ps1" }
+    $requiredExecutable = if ($InstallType -eq "portable") { "VoxNest.exe" } else { "start.ps1" }
     if ((Read-Version $InstallRoot) -ne $ExpectedVersion -or
         -not (Test-Path -LiteralPath (Join-Path $InstallRoot $requiredExecutable) -PathType Leaf)) {
       throw "安装后的文件验证失败。"
@@ -312,7 +312,7 @@ function Update-ReleasePackage([string]$Root, [string]$InstallType) {
   if ($latestVersion -notmatch '^\d+\.\d+\.\d+$') {
     throw "无法识别最新版本号：$($release.tag_name)"
   }
-  $archiveName = "Voice-Studio-$latestVersion-$assetSuffix"
+  $archiveName = "VoxNest-$latestVersion-$assetSuffix"
   $checksumName = "$archiveName.sha256"
   $archiveAsset = @($release.assets) | Where-Object { $_.name -eq $archiveName } | Select-Object -First 1
   $checksumAsset = @($release.assets) | Where-Object { $_.name -eq $checksumName } | Select-Object -First 1
@@ -348,9 +348,9 @@ function Update-ReleasePackage([string]$Root, [string]$InstallType) {
       return
     }
   }
-  Confirm-VoiceStudioStopped $Root
+  Confirm-VoxNestStopped $Root
 
-  $temporaryRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("VoiceStudio-Update-" + [guid]::NewGuid().ToString("N"))
+  $temporaryRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("VoxNest-Update-" + [guid]::NewGuid().ToString("N"))
   $downloadRoot = Join-Path $temporaryRoot "download"
   $extractRoot = Join-Path $temporaryRoot "extract"
   $backupRoot = Join-Path $temporaryRoot "backup"
@@ -371,14 +371,14 @@ function Update-ReleasePackage([string]$Root, [string]$InstallType) {
 
     Assert-ZipEntriesAreSafe $archivePath $extractRoot
     Expand-Archive -LiteralPath $archivePath -DestinationPath $extractRoot -Force
-    $markerName = if ($InstallType -eq "portable") { "VoiceStudio.exe" } else { "start.ps1" }
+    $markerName = if ($InstallType -eq "portable") { "VoxNest.exe" } else { "start.ps1" }
     $packageMarkers = @(Get-ChildItem -LiteralPath $extractRoot -Filter $markerName -File -Recurse)
     if ($packageMarkers.Count -ne 1) { throw "更新包结构无效：无法唯一确定 $markerName。" }
     $packageRoot = $packageMarkers[0].Directory.FullName
     if ((Read-Version $packageRoot) -ne $latestVersion) { throw "更新包版本与 Release 标签不一致。" }
 
     $requiredPaths = if ($InstallType -eq "portable") {
-      @("VoiceStudio.exe", "frontend\dist\index.html", "tools\ffmpeg.exe", "tools\ffprobe.exe", $managedManifestName)
+      @("VoxNest.exe", "frontend\dist\index.html", "tools\ffmpeg.exe", "tools\ffprobe.exe", $managedManifestName)
     } else {
       @("start.ps1", "backend\app\main.py", "backend\requirements.txt", "frontend\dist\index.html", $managedManifestName)
     }
@@ -389,12 +389,12 @@ function Update-ReleasePackage([string]$Root, [string]$InstallType) {
     }
 
     Install-ReleaseFiles $packageRoot $Root $backupRoot $latestVersion $InstallType
-    Write-Host "Voice Studio 已更新到 $latestVersion。" -ForegroundColor Green
+    Write-Host "VoxNest 已更新到 $latestVersion。" -ForegroundColor Green
     Write-Host "本地 data、系统凭据和非程序文件均已保留。"
     if ($InstallType -eq "windows") {
       Write-Host "下次启动时会自动检查 Python 依赖。"
     }
-    Start-VoiceStudio $Root
+    Start-VoxNest $Root
   } finally {
     if ($temporaryRoot -and (Test-Path -LiteralPath $temporaryRoot)) {
       Remove-Item -LiteralPath $temporaryRoot -Recurse -Force -ErrorAction SilentlyContinue
@@ -416,3 +416,4 @@ try {
   Write-Host "更新器不会主动删除 data 目录。"
   exit 1
 }
+

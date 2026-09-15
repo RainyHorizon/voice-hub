@@ -78,6 +78,35 @@ def _decode_audio(body: dict) -> bytes:
         raise ProviderError("MiniMax 返回成功状态，但没有有效音频数据", code="invalid_provider_response") from exc
 
 
+def _write_wav(audio: bytes, output: Path, duration: object) -> int:
+    output.parent.mkdir(parents=True, exist_ok=True)
+    source = output.with_name(output.stem + ".source.mp3")
+    source.write_bytes(audio)
+    try:
+        converted = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(source), "-acodec", "pcm_s16le", str(output)],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        if converted.returncode != 0:
+            raise ValueError("ffmpeg failed")
+        if not duration:
+            probe = subprocess.run(
+                ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "json", str(output)],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            duration = round(float(json.loads(probe.stdout)["format"]["duration"]) * 1000)
+        return int(duration)
+    except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
+        output.unlink(missing_ok=True)
+        raise ProviderError("MiniMax 返回的音频无法转换", code="invalid_audio_response") from exc
+    finally:
+        source.unlink(missing_ok=True)
+
+
 class MiniMaxProvider(SpeechProvider):
     key = "minimax"
 
@@ -237,23 +266,9 @@ class MiniMaxProvider(SpeechProvider):
         except ValueError as exc:
             raise ProviderError("MiniMax 返回了无法解析的数据", code="invalid_provider_response") from exc
         audio = _decode_audio(body)
-        output.parent.mkdir(parents=True, exist_ok=True)
-        source = output.with_name(output.stem + ".source.mp3")
-        source.write_bytes(audio)
-        try:
-            converted = subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(source), "-acodec", "pcm_s16le", str(output)], capture_output=True, text=True, timeout=120)
-            if converted.returncode != 0:
-                raise ValueError("ffmpeg failed")
-            duration = (body.get("extra_info") or {}).get("audio_length")
-            if not duration:
-                probe = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "json", str(output)], capture_output=True, text=True, timeout=30)
-                duration = round(float(json.loads(probe.stdout)["format"]["duration"]) * 1000)
-        except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
-            output.unlink(missing_ok=True)
-            raise ProviderError("MiniMax 返回的音频无法转换", code="invalid_audio_response") from exc
-        finally:
-            source.unlink(missing_ok=True)
-        return {"provider_request_id": body.get("trace_id", ""), "duration_ms": int(duration), "demo": False}
+        duration = (body.get("extra_info") or {}).get("audio_length")
+        duration_ms = await asyncio.to_thread(_write_wav, audio, output, duration)
+        return {"provider_request_id": body.get("trace_id", ""), "duration_ms": duration_ms, "demo": False}
 
     async def _upload(self, audio: bytes, filename: str, purpose: str) -> int:
         try:

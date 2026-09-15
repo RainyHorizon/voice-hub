@@ -1,5 +1,5 @@
 services:
-  voice-studio:
+  voxnest:
     image: ghcr.io/rainyhorizon/voice-studio:${VOICE_STUDIO_VERSION:-1.4.0}
     build:
       context: .
@@ -7,7 +7,7 @@ services:
         VERSION: ${VOICE_STUDIO_VERSION:-1.4.0}
         REVISION: ${VOICE_STUDIO_REVISION:-local}
         CREATED: ${VOICE_STUDIO_CREATED:-local}
-    container_name: voice-studio
+    container_name: voxnest
     restart: "no"
     init: true
     ports:
@@ -35,4 +35,5 @@ services:
       - no-new-privileges:true
     labels:
       org.opencontainers.image.source: https://github.com/RainyHorizon/voice-studio
-      org.opencontainers.image.description: Voice Studio local voice gateway
+      org.opencontainers.image.description: VoxNest local voice gateway
+

@@ -12,7 +12,7 @@ ARG VERSION=1.4.0
 ARG REVISION=unknown
 ARG CREATED=unknown
 
-LABEL org.opencontainers.image.title="Voice Studio" \
+LABEL org.opencontainers.image.title="VoxNest" \
       org.opencontainers.image.description="Local multi-provider AI voice studio and OpenAI-compatible gateway" \
       org.opencontainers.image.version="$VERSION" \
       org.opencontainers.image.revision="$REVISION" \
@@ -30,6 +30,7 @@ WORKDIR /app
 RUN apt-get update \
     && apt-get install --no-install-recommends -y ffmpeg ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system voice \
     && useradd --create-home --uid 10001 --gid voice --shell /usr/sbin/nologin voice \
     && mkdir -p /app/data/audio \
     && chown -R voice:voice /app
@@ -47,3 +48,4 @@ VOLUME ["/app/data"]
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/api/summary', timeout=3)"
 CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8765"]
+

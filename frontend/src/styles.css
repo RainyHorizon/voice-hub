@@ -271,6 +271,9 @@ h2 { color: var(--text); font-size: 24px; font-weight: 750; }
 .icon-button:hover { color: var(--blue); border-color: #dbe6ff; background: var(--blue-soft); }
 .notice { margin-bottom: 24px; border-color: #cfe1ff; background: #f2f7ff; color: #315caa; border-radius: 7px; }
 .notice button { color: #6f89b9; }
+.notice-update { margin-left: auto; padding: 5px 10px; border: 1px solid #9bbcff; border-radius: 5px; background: #4f82f7; color: #fff !important; cursor: pointer; }
+.notice-update:disabled { opacity: .65; cursor: wait; }
+.notice a { margin-left: 10px; color: #356de8; text-decoration: underline; }
 
 .synthesis-layout {
   grid-template-columns: minmax(520px, 1fr) 360px;

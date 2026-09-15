@@ -1,6 +1,6 @@
 # API 参考
 
-Voice Studio 默认在本机 `http://127.0.0.1:8765` 提供管理 API 和 OpenAI 兼容网关。启动后也可以打开 FastAPI 自动生成的交互文档：
+VoxNest 默认在本机 `http://127.0.0.1:8765` 提供管理 API 和 OpenAI 兼容网关。启动后也可以打开 FastAPI 自动生成的交互文档：
 
 - Swagger UI：`http://127.0.0.1:8765/docs`
 - OpenAPI JSON：`http://127.0.0.1:8765/openapi.json`
@@ -13,7 +13,7 @@ Voice Studio 默认在本机 `http://127.0.0.1:8765` 提供管理 API 和 OpenAI
 Authorization: Bearer <Gateway Key>
 ```
 
-Gateway Key 可在网页的“API 网关”页面查看或轮换。不要把厂商 API Key 放入客户端请求；网关会在本机后端读取系统密钥环或 Docker 环境变量。
+ Gateway Key 可在网页的“API 网关”页面查看或轮换。`GET /api/gateway` 默认只返回脱敏提示；只有本机可信网页明确请求 `?reveal=true` 时才返回完整 Key。远程部署不要依赖该接口自动获取密钥。不要把厂商 API Key 放入客户端请求；网关会在本机后端读取系统密钥环或 Docker 环境变量。
 
 ## OpenAI 兼容接口
 
@@ -44,7 +44,7 @@ Gateway Key 可在网页的“API 网关”页面查看或轮换。不要把厂�
 | `speed` | number | 否 | `0.25` 到 `4.0`，默认 `1.0` |
 | `instructions` | string | 否 | 支持指令控制的模型可使用，最多 2000 字符 |
 
-成功时直接返回音频二进制，并附带 `X-Voice-Studio-Job`、响应格式和延迟等响应头。PCM 是 `s16le` 原始数据，采样率、声道数和位深见 `X-Voice-Studio-PCM-*` 响应头。
+成功时直接返回音频二进制，并附带 `X-VoxNest-Job`、`X-VoxNest-Request-Id`、响应格式和延迟等响应头。PCM 是 `s16le` 原始数据，采样率、声道数和位深见 `X-VoxNest-PCM-*` 响应头。
 
 ### `POST /v1/audio/speech/stream`
 
@@ -112,3 +112,4 @@ curl.exe -N "http://127.0.0.1:8765/v1/audio/speech/stream" \
 | `/api/jobs` | 查询、下载、导出和删除任务 |
 | `/api/storage` | 读取和更新存储策略 |
 | `/api/gateway` | 读取本机网关配置 |
+

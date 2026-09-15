@@ -119,10 +119,15 @@ def _audio_entries(rows: list[sqlite3.Row], root: Path, audio_root: Path) -> lis
         if path is None:
             continue
         created_at = _parse_created_at(row["created_at"])
-        entry = grouped.setdefault(
-            path,
-            {"path": path, "size": path.stat().st_size, "created_at": created_at, "job_ids": []},
-        )
+        if path not in grouped:
+            try:
+                size = path.stat().st_size
+            except OSError:
+                # A concurrent cleanup or user action may remove the file after
+                # safe_audio_path() checks it. Treat it as missing this pass.
+                continue
+            grouped[path] = {"path": path, "size": size, "created_at": created_at, "job_ids": []}
+        entry = grouped[path]
         entry["created_at"] = min(entry["created_at"], created_at)
         entry["job_ids"].append(row["id"])
     return sorted(grouped.values(), key=lambda item: (item["created_at"], str(item["path"])))

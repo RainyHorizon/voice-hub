@@ -35,7 +35,7 @@ jobs:
 
       - name: Install FFmpeg (Ubuntu)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y ffmpeg
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y ffmpeg dbus-x11 gnome-keyring
 
       - name: Install FFmpeg (macOS)
         if: runner.os == 'macOS'
@@ -93,6 +93,14 @@ jobs:
         working-directory: frontend
         run: npm run build
 
+      - name: Lint frontend
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Test frontend
+        working-directory: frontend
+        run: npm test
+
       - name: Run backend tests
         working-directory: backend
         env:
@@ -100,6 +108,28 @@ jobs:
           VOICE_STUDIO_CREDENTIALS_MODE: env
           VOICE_STUDIO_GATEWAY_KEY: ci-test-gateway-key
         run: python -m pytest -q tests
+
+      - name: Test macOS system keyring
+        if: runner.os == 'macOS'
+        working-directory: backend
+        env:
+          PYTHONPATH: ${{ github.workspace }}/backend
+        run: python tests/keyring_smoke.py
+
+      - name: Test Linux Secret Service keyring
+        if: runner.os == 'Linux'
+        working-directory: backend
+        env:
+          PYTHONPATH: ${{ github.workspace }}/backend
+        run: |
+          dbus-run-session -- bash -euo pipefail -c '
+            runtime_dir="$(mktemp -d)"
+            trap '\''rm -rf "$runtime_dir"'\'' EXIT
+            chmod 700 "$runtime_dir"
+            export XDG_RUNTIME_DIR="$runtime_dir"
+            printf "\n" | gnome-keyring-daemon --unlock >/dev/null
+            python tests/keyring_smoke.py
+          '
 
   docker-build:
     name: Validate Docker image
@@ -117,7 +147,7 @@ jobs:
         with:
           context: .
           push: false
-          tags: voice-studio:ci
+          tags: voxnest:ci
           build-args: |
             VERSION=ci
             REVISION=${{ github.sha }}

@@ -95,7 +95,7 @@ def open_when_ready(url: str) -> None:
 
 
 def run() -> int:
-    parser = argparse.ArgumentParser(description="Voice Studio Windows 便携版")
+    parser = argparse.ArgumentParser(description="VoxNest Windows 便携版")
     parser.add_argument("--port", type=int, choices=range(1, 65536), help="本地服务端口")
     parser.add_argument("--no-browser", action="store_true", help="启动后不自动打开浏览器")
     parser.add_argument("--check", action="store_true", help="只检查便携版文件和运行环境")
@@ -105,14 +105,14 @@ def run() -> int:
     port, already_running = select_port(args.port)
     url = f"http://127.0.0.1:{port}"
     if already_running:
-        print(f"Voice Studio 已在运行：{url}")
+        print(f"VoxNest 已在运行：{url}")
         if not args.no_browser:
             webbrowser.open(url)
         return 0
 
     prepare_environment(root, port)
     if args.check:
-        print("Voice Studio 便携版检查通过")
+        print("VoxNest 便携版检查通过")
         print(f"程序目录：{root}")
         print(f"可用端口：{port}")
         return 0
@@ -129,9 +129,11 @@ def run() -> int:
     if not args.no_browser:
         open_when_ready(url)
     print("")
-    print(f"Voice Studio 已准备完成：{url}")
+    print(f"VoxNest 已准备完成：{url}")
     print("关闭此窗口即可停止服务。")
-    uvicorn.run(app, host="127.0.0.1", port=port, loop="asyncio", http="h11")
+    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, loop="asyncio", http="h11"))
+    app.state.request_shutdown = lambda: setattr(server, "should_exit", True)
+    server.run()
     return 0
 
 
@@ -142,7 +144,7 @@ def main() -> None:
         raise SystemExit(0) from None
     except Exception as exc:
         print("")
-        print("Voice Studio 启动失败")
+        print("VoxNest 启动失败")
         print(str(exc))
         input("按 Enter 键关闭窗口...")
         raise SystemExit(1) from exc

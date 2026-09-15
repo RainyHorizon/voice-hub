@@ -325,7 +325,7 @@ class VolcengineProvider(SpeechProvider):
         except httpx.HTTPError as exc:
             raise ProviderError("无法连接火山引擎语音接口", code="provider_unreachable") from exc
 
-        duration_ms = _write_audio(b"".join(chunks), output)
+        duration_ms = await asyncio.to_thread(_write_audio, b"".join(chunks), output)
         return {"provider_request_id": request_id, "duration_ms": duration_ms, "demo": False}
 
     async def clone_voice(self, audio: bytes, audio_format: str, speaker_id: str, language: int = 0) -> dict:

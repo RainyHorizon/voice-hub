@@ -3,5 +3,6 @@ setlocal
 chcp 65001 >nul
 cd /d "%~dp0"
 
-"%~dp0VoiceStudio.exe"
+"%~dp0VoxNest.exe"
 exit /b %errorlevel%
+

@@ -1,6 +1,6 @@
 # 架构说明
 
-Voice Studio 是单机优先的 React + FastAPI 应用。浏览器只访问本机后端，厂商密钥不会进入前端代码，也不会由浏览器直接发送到厂商。
+VoxNest 是单机优先的 React + FastAPI 应用。浏览器只访问本机后端，厂商密钥不会进入前端代码，也不会由浏览器直接发送到厂商。
 
 ```mermaid
 flowchart LR
@@ -20,14 +20,23 @@ flowchart LR
 
 | 目录或文件 | 职责 |
 | --- | --- |
-| `frontend/src/App.tsx` | 页面状态、表单交互、音色库、任务历史和网关控制台 |
+| `frontend/src/App.tsx` | 应用外壳、导航和已访问页面的实例保留 |
+| `frontend/src/context/StudioContext.tsx` | 模型、音色、任务、网关和合成状态的共享上下文 |
+| `frontend/src/pages/` | 合成、音色、克隆、设计、网关、历史和设置页面 |
+| `frontend/src/components/` | 页面间复用的选择器、标签页和辅助组件 |
 | `frontend/src/styles.css` | 全局布局、组件样式、响应式和无障碍焦点样式 |
-| `backend/app/main.py` | FastAPI 路由、请求校验、网关鉴权、任务记录和静态文件服务 |
+| `backend/app/main.py` | FastAPI 装配、中间件、异常处理、lifespan 和静态文件服务 |
+| `backend/app/routers/` | 账号、音色、任务、网关、存储和系统接口 |
+| `backend/app/services.py` | 模型解析、厂商适配器选择、音频转换和共享业务逻辑 |
+| `backend/app/database.py` | SQLite 连接策略、schema 版本、迁移和初始数据 |
+| `backend/app/config.py` | 版本、端口、路径、官方 Endpoint 和本机安全边界 |
 | `backend/app/providers/` | 各厂商 TTS、流式、克隆和设计能力的适配器 |
 | `backend/app/credentials.py` | 系统密钥环和 Docker 环境变量凭据读取/保存 |
 | `backend/app/storage.py` | 存储策略、容量统计和自动清理计划 |
+| `backend/tests/conftest.py` | pytest 临时根目录、凭据环境清理和外网访问拦截 |
 | `data/voice_studio.db` | 任务、音色、厂商账号元数据；不保存完整 API Key |
 | `data/audio/` | 生成音频、参考音频和设计试听文件 |
+| `data/logs/` | 启动器和运行时日志；升级时与其他用户数据一并保留 |
 
 ## 一次合成请求
 
@@ -40,14 +49,16 @@ sequenceDiagram
 
     C->>G: POST /v1/audio/speech + Bearer Key
     G->>G: 校验 Key、模型、音色和格式
-    G->>S: 读取音色与账号元数据
+    G->>S: 在线程池读取音色与账号元数据
     G->>P: 使用系统密钥调用厂商
     P-->>G: 返回 WAV 或流式音频
-    G->>S: 保存音频与任务记录
+    G->>S: 在线程池保存音频与任务记录
     G-->>C: 音频文件或 SSE 分片
 ```
 
 流式接口会优先使用厂商原生流式能力；不支持原生流式的模型由后端完成兼容转换。每次网关请求都会记录状态、延迟、模型和错误代码，但不会记录厂商密钥。
+
+异步路由中的 SQLite、音频文件读写、元数据读取和 FFmpeg 转换通过线程池执行，避免阻塞 FastAPI 事件循环。应用启动和自动存储清理由 FastAPI lifespan 管理。
 
 ## 凭据与安全边界
 
@@ -56,18 +67,26 @@ sequenceDiagram
 - `/v1/*` 接口必须携带 Gateway Key；默认服务地址只监听 `127.0.0.1`。
 - 自定义厂商 Endpoint 默认只允许官方域名；启用自定义 Endpoint 时应确保目标可信，否则厂商 Key 可能被发送到错误服务。
 - 音频路径在读取、下载和清理前都会校验其位于 `data/audio` 目录内。
+- 账号元数据与系统密钥环发生跨存储写入时会保留旧凭据快照；SQLite 操作失败会执行补偿恢复，降低两边状态分裂的风险。
 
 ## 存储生命周期
 
 任务元数据保存在 SQLite，音频单独保存在 `data/audio`。存储策略可以按保留天数和容量上限生成清理计划；默认只清理音频，任务文字记录继续保留。选择“任务记录”范围时，相关任务和音频会一起删除。
+
+旧版本曾在 `backend/` 或 `data/` 根目录生成日志。应用启动时会把这些已知旧日志迁移到 `data/logs/`；若存在同名文件则使用带时间戳的旧版文件名，原日志不会被覆盖。
 
 ## 扩展厂商
 
 新增厂商通常需要：
 
 1. 在 `backend/app/providers/` 增加实现 `base.py` 约定的适配器。
-2. 在 `main.py` 注册默认 Endpoint、模型列表和能力标记。
+2. 在 `config.py` 和 `services.py` 注册默认 Endpoint、模型列表和能力标记。
 3. 为同步、克隆、设计或流式能力补充对应测试。
 4. 在前端模型选择和设置页面补充显示信息。
 
 适配器应将厂商错误转换为 `ProviderError`，避免把密钥、完整上游响应或内部路径写入用户可见错误。
+
+## 测试隔离
+
+后端测试必须从 `backend` 目录使用 pytest 运行。`tests/conftest.py` 会在导入应用前设置临时 `VOICE_STUDIO_ROOT`、移除真实厂商凭据环境变量并阻止非本机网络连接，因此测试不会写入真实 `data/`，也不会调用厂商计费接口。
+

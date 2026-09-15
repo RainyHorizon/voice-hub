@@ -1,7 +1,7 @@
 import asyncio
 import tempfile
 import unittest
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
@@ -13,12 +13,19 @@ import httpx
 def isolated_storage(main):
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
-        with (
-            patch.object(main, "DATA", root / "data"),
-            patch.object(main, "AUDIO", root / "data" / "audio"),
-            patch.object(main, "DB_PATH", root / "data" / "voice_studio.db"),
-            patch.object(main, "GATEWAY_CONFIG_PATH", root / "data" / "gateway.json"),
-        ):
+        values = {
+            "ROOT": root,
+            "DATA": root / "data",
+            "AUDIO": root / "data" / "audio",
+            "DB_PATH": root / "data" / "voice_studio.db",
+            "FRONTEND_DIST": root / "frontend" / "dist",
+            "GATEWAY_CONFIG_PATH": root / "data" / "gateway.json",
+        }
+        with ExitStack() as stack:
+            for name, value in values.items():
+                stack.enter_context(patch.object(main.config, name, value))
+                if hasattr(main, name):
+                    stack.enter_context(patch.object(main, name, value))
             main.init_db()
             yield
 
@@ -40,6 +47,29 @@ def add_job(main, job_id: str, created_at: datetime, size: int) -> Path:
 
 
 class StoragePolicyTests(unittest.TestCase):
+    def test_snapshot_ignores_file_removed_during_scan(self):
+        from app import main
+        from app import storage
+
+        with isolated_storage(main):
+            audio = add_job(main, "job_race", datetime.now(timezone.utc), 128)
+            def disappearing_safe_path(*_args):
+                return audio
+
+            original_stat = Path.stat
+
+            def disappearing_stat(path, *args, **kwargs):
+                if path == audio:
+                    audio.unlink(missing_ok=True)
+                    raise FileNotFoundError(path)
+                return original_stat(path, *args, **kwargs)
+
+            with patch.object(storage, "safe_audio_path", side_effect=disappearing_safe_path), \
+                 patch.object(Path, "stat", disappearing_stat):
+                with main.db() as connection:
+                    snapshot = storage.storage_snapshot(connection, main.ROOT, main.AUDIO)
+            self.assertEqual(snapshot["usage"]["audio_count"], 0)
+
     def test_default_policy_and_update_endpoint(self):
         from app import main
 

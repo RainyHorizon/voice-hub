@@ -1,4 +1,4 @@
-﻿param(
+param(
   [string]$Version = "",
   [string]$FfmpegBinDirectory = ""
 )
@@ -38,7 +38,7 @@ if ($Version -notmatch '^[0-9A-Za-z][0-9A-Za-z._-]*$') {
   throw "版本号只能包含字母、数字、点、下划线和连字符。"
 }
 
-$packageName = "Voice-Studio-$Version-Windows-Portable"
+$packageName = "VoxNest-$Version-Windows-Portable"
 $stagePath = Join-Path $buildRoot $packageName
 $pyinstallerDist = Join-Path $buildRoot "pyinstaller-dist"
 $pyinstallerWork = Join-Path $buildRoot "pyinstaller-work"
@@ -94,12 +94,12 @@ foreach ($path in @($stagePath, $pyinstallerDist, $pyinstallerWork)) {
   if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Recurse -Force }
 }
 
-Write-Host "正在生成 VoiceStudio.exe..." -ForegroundColor Cyan
+Write-Host "正在生成 VoxNest.exe..." -ForegroundColor Cyan
 & $pythonExecutable -m PyInstaller `
   --noconfirm `
   --clean `
   --onedir `
-  --name VoiceStudio `
+  --name VoxNest `
   --paths $backendRoot `
   --collect-all keyring `
   --collect-all dashscope `
@@ -111,9 +111,9 @@ Write-Host "正在生成 VoiceStudio.exe..." -ForegroundColor Cyan
   (Join-Path $backendRoot "portable_main.py")
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller 构建失败。" }
 
-$builtApplication = Join-Path $pyinstallerDist "VoiceStudio"
-if (-not (Test-Path -LiteralPath (Join-Path $builtApplication "VoiceStudio.exe") -PathType Leaf)) {
-  throw "PyInstaller 未生成 VoiceStudio.exe。"
+$builtApplication = Join-Path $pyinstallerDist "VoxNest"
+if (-not (Test-Path -LiteralPath (Join-Path $builtApplication "VoxNest.exe") -PathType Leaf)) {
+  throw "PyInstaller 未生成 VoxNest.exe。"
 }
 Move-Item -LiteralPath $builtApplication -Destination $stagePath
 
@@ -124,11 +124,12 @@ New-Item -ItemType File -Force -Path (Join-Path $stagePath "data\audio\.gitkeep"
 New-Item -ItemType Directory -Force -Path (Join-Path $stagePath "tools") | Out-Null
 Copy-Item -LiteralPath $ffmpeg -Destination (Join-Path $stagePath "tools\ffmpeg.exe")
 Copy-Item -LiteralPath $ffprobe -Destination (Join-Path $stagePath "tools\ffprobe.exe")
-Copy-Item -LiteralPath (Join-Path $projectRoot "portable\启动 Voice Studio.bat") -Destination (Join-Path $stagePath "启动 Voice Studio.bat")
-Copy-Item -LiteralPath (Join-Path $projectRoot "portable\停止 Voice Studio.bat") -Destination (Join-Path $stagePath "停止 Voice Studio.bat")
-Copy-Item -LiteralPath (Join-Path $projectRoot "更新 Voice Studio.bat") -Destination (Join-Path $stagePath "更新 Voice Studio.bat")
+Copy-Item -LiteralPath (Join-Path $projectRoot "portable\启动 VoxNest.bat") -Destination (Join-Path $stagePath "启动 VoxNest.bat")
+Copy-Item -LiteralPath (Join-Path $projectRoot "portable\停止 VoxNest.bat") -Destination (Join-Path $stagePath "停止 VoxNest.bat")
+Copy-Item -LiteralPath (Join-Path $projectRoot "更新 VoxNest.bat") -Destination (Join-Path $stagePath "更新 VoxNest.bat")
 Copy-Item -LiteralPath (Join-Path $projectRoot "stop.ps1") -Destination (Join-Path $stagePath "stop.ps1")
 Copy-Item -LiteralPath (Join-Path $projectRoot "update.ps1") -Destination (Join-Path $stagePath "update.ps1")
+Copy-Item -LiteralPath (Join-Path $projectRoot "installer-update.ps1") -Destination (Join-Path $stagePath "installer-update.ps1")
 Copy-Item -LiteralPath (Join-Path $projectRoot "PORTABLE_README.md") -Destination (Join-Path $stagePath "便携版说明.md")
 Copy-Item -LiteralPath (Join-Path $projectRoot "README.md") -Destination (Join-Path $stagePath "README.md")
 Copy-Item -LiteralPath (Join-Path $projectRoot "LICENSE") -Destination (Join-Path $stagePath "LICENSE")
@@ -160,7 +161,7 @@ if ($forbiddenFiles) {
 }
 
 Write-Host "正在检查便携版..." -ForegroundColor Cyan
-& (Join-Path $stagePath "VoiceStudio.exe") --check --no-browser
+& (Join-Path $stagePath "VoxNest.exe") --check --no-browser
 if ($LASTEXITCODE -ne 0) { throw "便携版运行检查失败。" }
 
 if (Test-Path -LiteralPath $archivePath) { Remove-Item -LiteralPath $archivePath -Force }
@@ -175,3 +176,4 @@ Write-Host $archive.FullName
 Write-Host ("大小：{0:N2} MB" -f ($archive.Length / 1MB))
 Write-Host "SHA256：$($hash.Hash)"
 Write-Host "校验文件：$checksumPath"
+

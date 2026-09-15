@@ -64,15 +64,25 @@ jobs:
         env:
           RELEASE_VERSION: ${{ github.ref_name }}
         run: .\build-windows-portable.ps1 -Version ($env:RELEASE_VERSION -replace '^v', '') -FfmpegBinDirectory $env:FFMPEG_BIN
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+      - name: Build Windows installer
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ github.ref_name }}
+        run: .\build-windows-installer.ps1 -Version ($env:RELEASE_VERSION -replace '^v', '') -IsccPath 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
       - name: Upload Windows packages
         uses: actions/upload-artifact@v4
         with:
           name: windows-package
           path: |
-            output/releases/Voice-Studio-*-Windows.zip
-            output/releases/Voice-Studio-*-Windows.zip.sha256
-            output/releases/Voice-Studio-*-Windows-Portable.zip
-            output/releases/Voice-Studio-*-Windows-Portable.zip.sha256
+            output/releases/VoxNest-*-Windows.zip
+            output/releases/VoxNest-*-Windows.zip.sha256
+            output/releases/VoxNest-*-Windows-Portable.zip
+            output/releases/VoxNest-*-Windows-Portable.zip.sha256
+            output/releases/VoxNest-*-Windows-Setup.exe
+            output/releases/VoxNest-*-Windows-Setup.exe.sha256
 
   unix:
     name: ${{ matrix.os }} source package
@@ -111,7 +121,7 @@ jobs:
           PLATFORM_LABEL: ${{ matrix.label }}
         run: |
           version="${RELEASE_VERSION#v}"
-          package="Voice-Studio-${version}-${PLATFORM_LABEL}"
+          package="VoxNest-${version}-${PLATFORM_LABEL}"
           mkdir -p "dist/${package}/frontend" "dist/${package}/backend" "dist/${package}/data/audio"
           cp -R backend/app "dist/${package}/backend/"
           cp backend/requirements.txt "dist/${package}/backend/"
@@ -155,4 +165,4 @@ jobs:
           tag="${RELEASE_VERSION}"
           if [[ "${tag}" != v* ]]; then tag="v${tag}"; fi
           gh release create "$tag" release-assets/* --repo "${GITHUB_REPOSITORY}" \
-            --title "Voice Studio ${tag}" --generate-notes --verify-tag
+            --title "VoxNest ${tag}" --generate-notes --verify-tag

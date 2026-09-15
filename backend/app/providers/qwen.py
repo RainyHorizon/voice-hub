@@ -470,7 +470,7 @@ class QwenProvider(SpeechProvider):
         except (httpx.HTTPError, ValueError) as exc:
             raise ProviderError("无法连接通义千问语音接口", code="provider_unreachable") from exc
 
-        duration_ms = _write_wav(audio_response.content, output, request.speed)
+        duration_ms = await asyncio.to_thread(_write_wav, audio_response.content, output, request.speed)
         return {
             "provider_request_id": body.get("request_id", ""),
             "duration_ms": duration_ms,
@@ -519,7 +519,7 @@ class QwenProvider(SpeechProvider):
             raise
         except (httpx.HTTPError, ValueError) as exc:
             raise ProviderError("无法连接通义千问语音接口", code="provider_unreachable") from exc
-        duration_ms = _write_wav(audio_response.content, output, request.speed)
+        duration_ms = await asyncio.to_thread(_write_wav, audio_response.content, output, request.speed)
         return {
             "provider_request_id": body.get("request_id", ""),
             "duration_ms": duration_ms,
@@ -545,7 +545,7 @@ class QwenProvider(SpeechProvider):
             return data
 
         audio = await asyncio.to_thread(call)
-        duration_ms = _write_wav(audio, output, request.speed)
+        duration_ms = await asyncio.to_thread(_write_wav, audio, output, request.speed)
         return {"provider_request_id": "", "duration_ms": duration_ms, "demo": False}
 
     async def clone_voice(

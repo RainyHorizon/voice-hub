@@ -5,7 +5,11 @@ data/*
 !data/audio/
 data/audio/*
 !data/audio/.gitkeep
+!data/logs/
+data/logs/*
+!data/logs/.gitkeep
 output/
+tmp-smoke/
 *.log
 __pycache__/
 .pytest_cache/

@@ -5,6 +5,8 @@ import platform
 import keyring
 
 
+# Keep the original keyring service IDs so upgrades from Voice Studio retain
+# existing API keys. These are storage identifiers, not user-facing branding.
 SERVICE_NAME = "VoiceStudio.ProviderAccount"
 PROJECT_SERVICE_NAME = "VoiceStudio.ProviderProject"
 ENV_MODE = "env"
@@ -77,6 +79,19 @@ def save_provider_credentials(account_id: str, **credentials: str) -> None:
                 current = {}
         current.update({key: value for key, value in credentials.items() if value})
         keyring.set_password(SERVICE_NAME, account_id, json.dumps(current))
+    except Exception as exc:
+        raise CredentialStoreError(f"无法写入{credential_store_name()}") from exc
+
+
+def replace_provider_credentials(account_id: str, credentials: dict[str, str]) -> None:
+    """Replace an account's credential document exactly, primarily for rollback."""
+    if environment_account_provider(account_id):
+        raise CredentialStoreError("Docker 环境变量凭据由部署配置管理，不能在页面中修改")
+    try:
+        if credentials:
+            keyring.set_password(SERVICE_NAME, account_id, json.dumps(credentials))
+        elif keyring.get_password(SERVICE_NAME, account_id) is not None:
+            keyring.delete_password(SERVICE_NAME, account_id)
     except Exception as exc:
         raise CredentialStoreError(f"无法写入{credential_store_name()}") from exc
 
@@ -160,3 +175,4 @@ def credential_store_status() -> dict[str, str | bool]:
     except Exception as exc:
         # Some keyring backends raise NoKeyringError/RuntimeError instead of KeyringError.
         return {"available": False, "backend": "", "message": f"无法访问{credential_store_name()}：{exc}"}
+

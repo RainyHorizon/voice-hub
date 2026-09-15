@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import binascii
 import json
@@ -13,6 +14,17 @@ from .base import ProviderError, ProviderModel, SpeechProvider, SynthesisRequest
 
 
 DEFAULT_ENDPOINT = "https://api.xiaomimimo.com/v1"
+
+
+def _write_wav(audio: bytes, output: Path) -> int:
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_bytes(audio)
+    try:
+        with wave.open(str(output), "rb") as stream:
+            return round(stream.getnframes() / stream.getframerate() * 1000)
+    except (wave.Error, ZeroDivisionError) as exc:
+        output.unlink(missing_ok=True)
+        raise ProviderError("无法读取小米 MiMo 返回的 WAV 音频", code="invalid_audio_response") from exc
 
 MIMO_MODELS = [
     ProviderModel(
@@ -230,14 +242,7 @@ class MiMoProvider(SpeechProvider):
         if len(audio_bytes) < 44 or audio_bytes[:4] != b"RIFF" or audio_bytes[8:12] != b"WAVE":
             raise ProviderError("小米 MiMo 返回的内容不是有效 WAV 音频", code="invalid_audio_response")
 
-        output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_bytes(audio_bytes)
-        try:
-            with wave.open(str(output), "rb") as stream:
-                duration_ms = round(stream.getnframes() / stream.getframerate() * 1000)
-        except (wave.Error, ZeroDivisionError) as exc:
-            output.unlink(missing_ok=True)
-            raise ProviderError("无法读取小米 MiMo 返回的 WAV 音频", code="invalid_audio_response") from exc
+        duration_ms = await asyncio.to_thread(_write_wav, audio_bytes, output)
 
         return {
             "provider_request_id": body.get("id", ""),

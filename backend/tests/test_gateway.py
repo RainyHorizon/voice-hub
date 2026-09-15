@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 import unittest
 import zipfile
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
 from unittest.mock import patch
 
@@ -16,10 +16,19 @@ import httpx
 def isolated_storage(main):
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
-        with patch.object(main, "DATA", root / "data"), \
-            patch.object(main, "AUDIO", root / "data" / "audio"), \
-            patch.object(main, "DB_PATH", root / "data" / "voice_studio.db"), \
-            patch.object(main, "GATEWAY_CONFIG_PATH", root / "data" / "gateway.json"):
+        values = {
+            "ROOT": root,
+            "DATA": root / "data",
+            "AUDIO": root / "data" / "audio",
+            "DB_PATH": root / "data" / "voice_studio.db",
+            "FRONTEND_DIST": root / "frontend" / "dist",
+            "GATEWAY_CONFIG_PATH": root / "data" / "gateway.json",
+        }
+        with ExitStack() as stack:
+            for name, value in values.items():
+                stack.enter_context(patch.object(main.config, name, value))
+                if hasattr(main, name):
+                    stack.enter_context(patch.object(main, name, value))
             main.init_db()
             yield
 
@@ -42,16 +51,16 @@ class GatewayEndpointTests(unittest.TestCase):
                        VALUES (?,?,?,?,?,?,?,?,?,?)""",
                     ("pp_astrbot", "pa_volc", "astrbot", "Astrbot", "active", 1, "remote", timestamp, timestamp, timestamp),
                 )
-            with patch.object(main, "load_api_key", return_value="default-key"), \
-                patch.object(main, "load_provider_credentials", return_value={"openapi_access_key": "ak", "openapi_secret_key": "sk"}), \
-                patch.object(main, "load_project_api_key", return_value="astrbot-key"):
+            with patch("app.services.load_api_key", return_value="default-key"), \
+                patch("app.services.load_provider_credentials", return_value={"openapi_access_key": "ak", "openapi_secret_key": "sk"}), \
+                patch("app.services.load_project_api_key", return_value="astrbot-key"):
                 adapter = main.provider_for("volcengine", "pa_volc", "astrbot")
             self.assertIsInstance(adapter, VolcengineProvider)
             self.assertEqual(adapter.api_key, "astrbot-key")
 
-            with patch.object(main, "load_api_key", return_value="default-key"), \
-                patch.object(main, "load_provider_credentials", return_value={"openapi_access_key": "ak", "openapi_secret_key": "sk"}), \
-                patch.object(main, "load_project_api_key", return_value=None):
+            with patch("app.services.load_api_key", return_value="default-key"), \
+                patch("app.services.load_provider_credentials", return_value={"openapi_access_key": "ak", "openapi_secret_key": "sk"}), \
+                patch("app.services.load_project_api_key", return_value=None):
                 with self.assertRaisesRegex(Exception, "没有已同步的语音 API Key"):
                     main.provider_for("volcengine", "pa_volc", "astrbot")
 
@@ -61,7 +70,7 @@ class GatewayEndpointTests(unittest.TestCase):
 
         async def run():
             adapter = VolcengineProvider("test-key")
-            with isolated_storage(main), patch.object(main, "provider_for", return_value=adapter), \
+            with isolated_storage(main), patch("app.routers.voices.provider_for", return_value=adapter), \
                 patch.object(
                     adapter,
                     "clone_voice",
@@ -145,7 +154,7 @@ class GatewayEndpointTests(unittest.TestCase):
                             ),
                         )
                     transport = httpx.ASGITransport(app=main.app)
-                    with patch.object(main, "provider_for", return_value=main.demo_provider) as provider_factory:
+                    with patch("app.routers.gateway.provider_for", return_value=main.demo_provider) as provider_factory:
                         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
                             response = await client.post(
                                 "/v1/audio/speech",
@@ -167,13 +176,13 @@ class GatewayEndpointTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             audio = Path(directory) / "audio"
-            with patch.object(main, "AUDIO", audio), patch.object(main.platform, "system", return_value="Linux"), patch.dict(os.environ, {"DISPLAY": "", "WAYLAND_DISPLAY": ""}, clear=True):
+            with patch.object(main.config, "AUDIO", audio), patch.object(main.platform, "system", return_value="Linux"), patch.dict(os.environ, {"DISPLAY": "", "WAYLAND_DISPLAY": ""}, clear=True):
                 result = main.open_storage_directory()
             self.assertFalse(result["opened"])
             self.assertEqual(result["path"], str(audio.resolve()))
             self.assertIn("没有图形桌面", result["message"])
 
-            with patch.object(main, "AUDIO", audio), patch.object(main.platform, "system", return_value="Linux"), patch.dict(os.environ, {"DISPLAY": ":0"}, clear=False), patch.object(subprocess, "Popen") as popen:
+            with patch.object(main.config, "AUDIO", audio), patch.object(main.platform, "system", return_value="Linux"), patch.dict(os.environ, {"DISPLAY": ":0"}, clear=False), patch.object(subprocess, "Popen") as popen:
                 result = main.open_storage_directory()
             self.assertTrue(result["opened"])
             popen.assert_called_once()
@@ -209,9 +218,9 @@ class GatewayEndpointTests(unittest.TestCase):
                 (frontend / "index.html").write_text("ready", encoding="utf-8")
                 command_result = {"id": "tool", "label": "tool", "status": "ok", "version": "1.0", "detail": "C:/tool.exe"}
                 with isolated_storage(main), \
-                    patch.object(main, "FRONTEND_DIST", frontend), \
-                    patch.object(main, "_command_diagnostic", side_effect=lambda command, arguments, required: {**command_result, "id": command, "label": command}), \
-                    patch.object(main, "credential_store_status", return_value={"available": True, "backend": "WinVaultKeyring", "message": "可用"}):
+                    patch.object(main.config, "FRONTEND_DIST", frontend), \
+                    patch("app.routers.system._command_diagnostic", side_effect=lambda command, arguments, required: {**command_result, "id": command, "label": command}), \
+                    patch("app.routers.system.credential_store_status", return_value={"available": True, "backend": "WinVaultKeyring", "message": "可用"}):
                     transport = httpx.ASGITransport(app=main.app)
                     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
                         response = await client.get("/api/system/diagnostics")
@@ -326,7 +335,7 @@ class GatewayEndpointTests(unittest.TestCase):
                 secret = root / "data" / "gateway.json"
                 secret.parent.mkdir(parents=True)
                 secret.write_text("should-never-be-served", encoding="utf-8")
-                with patch.object(main, "FRONTEND_DIST", frontend):
+                with patch.object(main.config, "FRONTEND_DIST", frontend):
                     transport = httpx.ASGITransport(app=main.app)
                     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
                         response = await client.get("/%2e%2e/%2e%2e/data/gateway.json")
@@ -334,7 +343,7 @@ class GatewayEndpointTests(unittest.TestCase):
 
         asyncio.run(run())
 
-    def test_gateway_config_and_models_require_the_generated_key(self):
+    def test_gateway_config_masks_key_until_local_ui_requests_reveal(self):
         with patch.dict(os.environ, {"VOICE_STUDIO_GATEWAY_KEY": "test_gateway_key"}, clear=False):
             from app import main
 
@@ -345,7 +354,13 @@ class GatewayEndpointTests(unittest.TestCase):
                     self.assertNotIn("key_prefix", summary.json().get("gateway", {}))
                     config = await client.get("/api/gateway")
                     self.assertEqual(config.status_code, 200)
-                    self.assertEqual(config.json()["key"], "test_gateway_key")
+                    self.assertEqual(config.json()["key"], "")
+                    self.assertFalse(config.json()["key_exposed"])
+                    revealed = await client.get("/api/gateway?reveal=true")
+                    self.assertEqual(revealed.json()["key"], "test_gateway_key")
+                    self.assertTrue(revealed.json()["key_exposed"])
+                    remote = await client.get("/api/gateway?reveal=true", headers={"Origin": "https://remote.example"})
+                    self.assertEqual(remote.status_code, 403)
                     denied = await client.get("/v1/models")
                     self.assertEqual(denied.status_code, 401)
                     self.assertEqual(denied.json()["error"]["code"], "gateway_auth_failed")
@@ -359,6 +374,15 @@ class GatewayEndpointTests(unittest.TestCase):
             with isolated_storage(main):
                 asyncio.run(run())
 
+    def test_convert_audio_reports_missing_ffmpeg_as_provider_error(self):
+        from app.providers.base import ProviderError
+        from app.services import convert_audio
+
+        with patch("app.services.subprocess.run", side_effect=FileNotFoundError("ffmpeg")):
+            with self.assertRaises(ProviderError) as raised:
+                convert_audio(Path("input.wav"), "mp3")
+        self.assertEqual(raised.exception.code, "audio_conversion_failed")
+
     def test_speech_returns_binary_audio_with_gateway_metadata(self):
         with patch.dict(os.environ, {"VOICE_STUDIO_GATEWAY_KEY": "test_gateway_key"}, clear=False):
             from app import main
@@ -366,7 +390,7 @@ class GatewayEndpointTests(unittest.TestCase):
             async def run():
                 transport = httpx.ASGITransport(app=main.app)
                 async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-                    with patch.object(main, "provider_for", return_value=main.demo_provider):
+                    with patch("app.routers.gateway.provider_for", return_value=main.demo_provider):
                         response = await client.post(
                             "/v1/audio/speech",
                             headers={"Authorization": "Bearer test_gateway_key"},
@@ -394,7 +418,7 @@ class GatewayEndpointTests(unittest.TestCase):
                 transport = httpx.ASGITransport(app=main.app)
                 async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
                     headers = {"Authorization": "Bearer test_gateway_key"}
-                    with patch.object(main, "provider_for", return_value=main.demo_provider):
+                    with patch("app.routers.gateway.provider_for", return_value=main.demo_provider):
                         completed = await client.post(
                             "/v1/audio/speech",
                             headers=headers,
@@ -471,7 +495,7 @@ class GatewayEndpointTests(unittest.TestCase):
             async def run():
                 transport = httpx.ASGITransport(app=main.app)
                 async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-                    with patch.object(main, "provider_for", return_value=main.demo_provider):
+                    with patch("app.routers.gateway.provider_for", return_value=main.demo_provider):
                         response = await client.post(
                             "/v1/audio/speech/stream",
                             headers={"Authorization": "Bearer test_gateway_key"},
@@ -534,7 +558,7 @@ class GatewayEndpointTests(unittest.TestCase):
             async def run():
                 transport = httpx.ASGITransport(app=main.app)
                 async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-                    with patch.object(main, "provider_for", return_value=NativeProvider()):
+                    with patch("app.routers.gateway.provider_for", return_value=NativeProvider()):
                         response = await client.post(
                             "/v1/audio/speech/stream",
                             headers={"Authorization": "Bearer test_gateway_key"},
@@ -576,7 +600,7 @@ class GatewayEndpointTests(unittest.TestCase):
             async def run():
                 transport = httpx.ASGITransport(app=main.app)
                 async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-                    with patch.object(main, "provider_for", return_value=NativePcmProvider()):
+                    with patch("app.routers.gateway.provider_for", return_value=NativePcmProvider()):
                         response = await client.post(
                             "/v1/audio/speech/stream",
                             headers={"Authorization": "Bearer test_gateway_key"},
@@ -660,7 +684,7 @@ class GatewayEndpointTests(unittest.TestCase):
             async def run():
                 transport = httpx.ASGITransport(app=main.app)
                 async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-                    with patch.object(main, "provider_for", return_value=main.demo_provider):
+                    with patch("app.routers.gateway.provider_for", return_value=main.demo_provider):
                         created = await client.post(
                             "/v1/audio/speech",
                             headers={"Authorization": "Bearer test_gateway_key"},
@@ -732,7 +756,7 @@ class GatewayEndpointTests(unittest.TestCase):
                 async def fake_synthesize(request, output):
                     return await main.demo_provider.synthesize(request, output)
 
-                with patch.object(main, "provider_for", return_value=adapter), patch.object(adapter, "synthesize", side_effect=fake_synthesize):
+                with patch("app.routers.voices.provider_for", return_value=adapter), patch.object(adapter, "synthesize", side_effect=fake_synthesize):
                     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
                         response = await client.post(
                             "/api/voices/design",

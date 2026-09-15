@@ -1,4 +1,4 @@
-﻿param(
+param(
   [string]$Version = ""
 )
 
@@ -17,7 +17,7 @@ if ($Version -notmatch '^[0-9A-Za-z][0-9A-Za-z._-]*$') {
   throw "版本号只能包含字母、数字、点、下划线和连字符。"
 }
 
-$packageName = "Voice-Studio-$Version-Windows"
+$packageName = "VoxNest-$Version-Windows"
 $stagePath = Join-Path $buildRoot $packageName
 $archivePath = Join-Path $releaseRoot "$packageName.zip"
 $resolvedOutput = [System.IO.Path]::GetFullPath($outputRoot).TrimEnd('\') + '\'
@@ -47,8 +47,8 @@ Copy-Item -LiteralPath (Join-Path $projectRoot "backend\app") -Destination (Join
 Copy-Item -LiteralPath (Join-Path $projectRoot "backend\requirements.txt") -Destination (Join-Path $stagePath "backend\requirements.txt")
 Copy-Item -LiteralPath (Join-Path $projectRoot "frontend\dist") -Destination (Join-Path $stagePath "frontend\dist") -Recurse
 Copy-Item -LiteralPath (Join-Path $projectRoot "start.ps1") -Destination (Join-Path $stagePath "start.ps1")
-Copy-Item -LiteralPath (Join-Path $projectRoot "启动 Voice Studio.bat") -Destination (Join-Path $stagePath "启动 Voice Studio.bat")
-Copy-Item -LiteralPath (Join-Path $projectRoot "更新 Voice Studio.bat") -Destination (Join-Path $stagePath "更新 Voice Studio.bat")
+Copy-Item -LiteralPath (Join-Path $projectRoot "启动 VoxNest.bat") -Destination (Join-Path $stagePath "启动 VoxNest.bat")
+Copy-Item -LiteralPath (Join-Path $projectRoot "更新 VoxNest.bat") -Destination (Join-Path $stagePath "更新 VoxNest.bat")
 Copy-Item -LiteralPath (Join-Path $projectRoot "update.ps1") -Destination (Join-Path $stagePath "update.ps1")
 Copy-Item -LiteralPath (Join-Path $projectRoot "README.md") -Destination (Join-Path $stagePath "README.md")
 Copy-Item -LiteralPath (Join-Path $projectRoot "LICENSE") -Destination (Join-Path $stagePath "LICENSE")
@@ -87,3 +87,4 @@ Write-Host "Windows Release 已生成：" -ForegroundColor Green
 Write-Host $archivePath
 Write-Host "SHA256：$($hash.Hash)"
 Write-Host "校验文件：$checksumPath"
+
