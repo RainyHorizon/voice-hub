@@ -30,8 +30,8 @@ WORKDIR /app
 RUN apt-get update \
     && apt-get install --no-install-recommends -y ffmpeg ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
-    && groupadd --system voice \
-    && useradd --create-home --uid 10001 --gid voice --shell /usr/sbin/nologin voice \
+    && (getent group voice >/dev/null || groupadd --system voice) \
+    && (getent passwd voice >/dev/null || useradd --create-home --uid 10001 --gid voice --shell /usr/sbin/nologin voice) \
     && mkdir -p /app/data/audio \
     && chown -R voice:voice /app
 
