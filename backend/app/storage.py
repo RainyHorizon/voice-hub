@@ -261,13 +261,18 @@ def execute_cleanup(
     policy = read_policy(connection)
     plan = build_cleanup_plan(connection, root, audio_root, policy, current_time=current_time)
     removed_paths: set[Path] = set()
+    quarantine = audio_root / ".cleanup-trash" / run_id
+    moved_files: list[tuple[Path, Path]] = []
     bytes_freed = 0
     errors: list[str] = []
+    quarantine.mkdir(parents=True, exist_ok=True)
     for item in plan["files"]:
         path = item["path"]
         try:
             size = path.stat().st_size
-            path.unlink()
+            target = quarantine / f"{len(moved_files):04d}_{path.name}"
+            path.replace(target)
+            moved_files.append((path, target))
             bytes_freed += size
             removed_paths.add(path)
         except FileNotFoundError:
@@ -284,44 +289,85 @@ def execute_cleanup(
     jobs_removed = 0
     jobs_preserved = 0
     cleaned_at = iso_now()
-    if policy["cleanup_scope"] == "jobs":
-        removable = set(plan["jobs_to_remove"])
-        failed_audio_job_ids = set(plan["affected_job_ids"]) - successful_audio_job_ids
-        removable -= failed_audio_job_ids
-        if removable:
-            connection.executemany("DELETE FROM jobs WHERE id=?", [(job_id,) for job_id in removable])
-        jobs_removed = len(removable)
-    elif successful_audio_job_ids:
-        connection.executemany(
-            "UPDATE jobs SET audio_path=NULL, audio_cleaned_at=?, audio_cleanup_reason=? WHERE id=?",
-            [(cleaned_at, trigger, job_id) for job_id in successful_audio_job_ids],
-        )
-        jobs_preserved = len(successful_audio_job_ids)
+    try:
+        if policy["cleanup_scope"] == "jobs":
+            removable = set(plan["jobs_to_remove"])
+            failed_audio_job_ids = set(plan["affected_job_ids"]) - successful_audio_job_ids
+            removable -= failed_audio_job_ids
+            if removable:
+                connection.executemany("DELETE FROM jobs WHERE id=?", [(job_id,) for job_id in removable])
+            jobs_removed = len(removable)
+        elif successful_audio_job_ids:
+            connection.executemany(
+                "UPDATE jobs SET audio_path=NULL, audio_cleaned_at=?, audio_cleanup_reason=? WHERE id=?",
+                [(cleaned_at, trigger, job_id) for job_id in successful_audio_job_ids],
+            )
+            jobs_preserved = len(successful_audio_job_ids)
 
-    status = "completed" if not errors else "partial"
-    message = "没有符合当前策略的音频" if not plan["file_count"] and not jobs_removed else "清理完成"
-    if errors:
-        message = f"部分文件清理失败：{'；'.join(errors[:3])}"
-    completed_at = iso_now()
-    connection.execute(
-        """
-        INSERT INTO storage_cleanup_runs
-          (id, trigger, status, files_removed, jobs_removed, jobs_preserved, bytes_freed, started_at, completed_at, message)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            run_id,
-            trigger,
-            status,
-            len(removed_paths),
-            jobs_removed,
-            jobs_preserved,
-            bytes_freed,
-            started_at,
-            completed_at,
-            message,
-        ),
-    )
+        status = "completed" if not errors else "partial"
+        message = "没有符合当前策略的音频" if not plan["file_count"] and not jobs_removed else "清理完成"
+        if errors:
+            message = f"部分文件清理失败：{'；'.join(errors[:3])}"
+        completed_at = iso_now()
+        connection.execute(
+            """
+            INSERT INTO storage_cleanup_runs
+              (id, trigger, status, files_removed, jobs_removed, jobs_preserved, bytes_freed, started_at, completed_at, message)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                run_id,
+                trigger,
+                status,
+                len(removed_paths),
+                jobs_removed,
+                jobs_preserved,
+                bytes_freed,
+                started_at,
+                completed_at,
+                message,
+            ),
+        )
+        # Commit the metadata while the files still exist in quarantine. A
+        # commit/update failure can therefore restore every original path.
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        for original, target in reversed(moved_files):
+            if target.exists():
+                original.parent.mkdir(parents=True, exist_ok=True)
+                target.replace(original)
+        try:
+            quarantine.rmdir()
+        except OSError:
+            pass
+        raise
+
+    for _, target in moved_files:
+        try:
+            target.unlink(missing_ok=True)
+        except OSError:
+            # Keep it quarantined. A later cleanup run will retry removal and
+            # it can no longer be mistaken for a job's live audio file.
+            pass
+    try:
+        quarantine.rmdir()
+        trash_root = quarantine.parent
+        for stale in trash_root.iterdir():
+            if not stale.is_dir():
+                continue
+            for item in stale.iterdir():
+                try:
+                    item.unlink(missing_ok=True)
+                except OSError:
+                    pass
+            try:
+                stale.rmdir()
+            except OSError:
+                pass
+        trash_root.rmdir()
+    except OSError:
+        pass
     return {
         "id": run_id,
         "trigger": trigger,

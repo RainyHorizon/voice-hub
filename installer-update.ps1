@@ -1,4 +1,4 @@
-param(
+﻿param(
   [Parameter(Mandatory=$true)][string]$InstallDirectory,
   [Parameter(Mandatory=$true)][int]$ParentProcessId,
   [Parameter(Mandatory=$true)][string]$SetupUrl,
@@ -12,10 +12,21 @@ $root = [IO.Path]::GetFullPath($InstallDirectory)
 $downloadRoot = Split-Path -Parent $ReadyFile
 $logFile = Join-Path $root 'data\logs\installer-update.log'
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $logFile) | Out-Null
+function Get-Sha256([string]$Path) {
+  $algorithm = [System.Security.Cryptography.SHA256]::Create()
+  $stream = $null
+  try {
+    $stream = [System.IO.File]::OpenRead($Path)
+    return ([System.BitConverter]::ToString($algorithm.ComputeHash($stream)) -replace "-", "").ToUpperInvariant()
+  } finally {
+    if ($null -ne $stream) { $stream.Dispose() }
+    $algorithm.Dispose()
+  }
+}
 try {
   if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw 'Invalid release version.' }
   if (-not (Test-Path -LiteralPath (Join-Path $root 'voxnest-install.ini'))) { throw 'Not a VoxNest Setup installation.' }
-  $prefix = 'https://github.com/RainyHorizon/voice-studio/releases/download/'
+  $prefix = 'https://github.com/RainyHorizon/VoxNest/releases/download/'
   foreach ($url in @($SetupUrl, $ChecksumUrl)) {
     if (-not $url.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) { throw 'Untrusted update URL.' }
   }
@@ -25,7 +36,7 @@ try {
   Invoke-WebRequest -UseBasicParsing -Uri $ChecksumUrl -OutFile $checksum -TimeoutSec 60
   $checksumText = Get-Content -LiteralPath $checksum -Raw
   if ($checksumText -notmatch '^\s*([0-9a-fA-F]{64})\s+') { throw 'Invalid SHA256 file.' }
-  if ((Get-FileHash -LiteralPath $setup -Algorithm SHA256).Hash -ne $Matches[1]) { throw 'SHA256 mismatch.' }
+  if ((Get-Sha256 $setup) -ne $Matches[1].ToUpperInvariant()) { throw 'SHA256 mismatch.' }
   Set-Content -LiteralPath $ReadyFile -Value 'ready' -Encoding Ascii
   $deadline = (Get-Date).AddMinutes(5)
   while (Get-Process -Id $ParentProcessId -ErrorAction SilentlyContinue) {

@@ -1,4 +1,5 @@
 import asyncio
+import sqlite3
 import tempfile
 import unittest
 from contextlib import ExitStack, contextmanager
@@ -190,6 +191,39 @@ class StoragePolicyTests(unittest.TestCase):
                 row = connection.execute("SELECT 1 FROM jobs WHERE id='job_expired'").fetchone()
             self.assertEqual(result["jobs_removed"], 1)
             self.assertIsNone(row)
+
+    def test_cleanup_restores_audio_when_database_update_fails(self):
+        from app import main
+
+        class FailingConnection:
+            def __init__(self, connection):
+                self.connection = connection
+
+            def __getattr__(self, name):
+                return getattr(self.connection, name)
+
+            def execute(self, sql, parameters=()):
+                if "INSERT INTO storage_cleanup_runs" in sql:
+                    raise sqlite3.OperationalError("simulated database failure")
+                return self.connection.execute(sql, parameters)
+
+        with isolated_storage(main):
+            old_audio = add_job(main, "job_restore", datetime.now(timezone.utc) - timedelta(days=60), 512)
+            with self.assertRaisesRegex(sqlite3.OperationalError, "simulated"):
+                with main.db() as connection:
+                    main.execute_cleanup(
+                        FailingConnection(connection),
+                        main.ROOT,
+                        main.AUDIO,
+                        trigger="manual",
+                        run_id="cleanup_restore_test",
+                    )
+            self.assertTrue(old_audio.is_file())
+            with main.db() as connection:
+                job = connection.execute("SELECT audio_path FROM jobs WHERE id='job_restore'").fetchone()
+                run = connection.execute("SELECT 1 FROM storage_cleanup_runs WHERE id='cleanup_restore_test'").fetchone()
+            self.assertEqual(job["audio_path"], str(old_audio))
+            self.assertIsNone(run)
 
     def test_automatic_cleanup_runs_only_when_due(self):
         from app import main

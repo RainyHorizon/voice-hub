@@ -1,6 +1,7 @@
 import asyncio
 import io
 import os
+import sqlite3
 import subprocess
 import tempfile
 import unittest
@@ -171,6 +172,99 @@ class GatewayEndpointTests(unittest.TestCase):
 
             asyncio.run(run())
 
+    def test_imported_voice_is_bound_to_the_selected_provider_account(self):
+        from app import main
+
+        async def run():
+            with isolated_storage(main):
+                timestamp = main.now()
+                with main.db() as connection:
+                    connection.executemany(
+                        "INSERT INTO provider_accounts VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        [
+                            ("pa_qwen_a", "dashscope", "千问 A", None, None, None, "active", "••••aaaa", "", "", timestamp, timestamp, None),
+                            ("pa_qwen_b", "dashscope", "千问 B", None, None, None, "active", "••••bbbb", "", "", timestamp, timestamp, None),
+                        ],
+                    )
+                transport = httpx.ASGITransport(app=main.app)
+                async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+                    payload = {
+                        "provider": "dashscope",
+                        "model_id": "qwen3-tts-vc-2026-01-22",
+                        "provider_voice_id": "remote-shared-id",
+                        "display_name": "账号 A 音色",
+                        "public_name": "account-a-voice",
+                        "provider_account_id": "pa_qwen_a",
+                    }
+                    created_a = await client.post("/api/voices/import", json=payload)
+                    created_b = await client.post(
+                        "/api/voices/import",
+                        json={**payload, "display_name": "账号 B 音色", "public_name": "account-b-voice", "provider_account_id": "pa_qwen_b"},
+                    )
+                    ambiguous = await client.post(
+                        "/api/voices/import",
+                        json={**payload, "provider_voice_id": "another-id", "public_name": "ambiguous-account", "provider_account_id": None},
+                    )
+                self.assertEqual(created_a.status_code, 200)
+                self.assertEqual(created_b.status_code, 200)
+                self.assertEqual(created_a.json()["voice"]["provider_account_id"], "pa_qwen_a")
+                self.assertEqual(created_b.json()["voice"]["provider_account_id"], "pa_qwen_b")
+                self.assertEqual(ambiguous.status_code, 409)
+                self.assertEqual(ambiguous.json()["error"]["code"], "provider_account_required")
+
+        asyncio.run(run())
+
+    def test_deleted_voice_cannot_be_resolved_and_active_alias_is_unique(self):
+        from app import main
+
+        with isolated_storage(main):
+            model = main.resolve_model("mimo/mimo-v2.5-tts")
+            self.assertIsNotNone(main.resolve_voice("mimo-default", model))
+            with main.db() as connection:
+                connection.execute("UPDATE voices SET status='deleted' WHERE public_name='mimo-default'")
+            self.assertIsNone(main.resolve_voice("mimo-default", model))
+            with self.assertRaises(sqlite3.IntegrityError):
+                with main.db() as connection:
+                    connection.execute(
+                        """INSERT INTO voices
+                           (id,provider,model_id,provider_voice_id,display_name,public_name,voice_type,status,languages,created_at)
+                           VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                        ("voice_alias_one", "demo", "local-demo", "one", "One", "atomic-alias", "preset", "active", "[]", main.now()),
+                    )
+                    connection.execute(
+                        """INSERT INTO voices
+                           (id,provider,model_id,provider_voice_id,display_name,public_name,voice_type,status,languages,created_at)
+                           VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                        ("voice_alias_two", "demo", "local-demo", "two", "Two", "atomic-alias", "preset", "active", "[]", main.now()),
+                    )
+
+    def test_voice_design_converts_credential_errors_to_http_response(self):
+        from app import main
+        from app.providers.base import ProviderError
+
+        async def run():
+            with isolated_storage(main), patch(
+                "app.routers.voices.provider_for",
+                side_effect=ProviderError("凭据存储不可用", code="credential_store_error", status=503),
+            ):
+                transport = httpx.ASGITransport(app=main.app)
+                async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+                    response = await client.post(
+                        "/api/voices/design",
+                        json={
+                            "provider": "mimo",
+                            "model_id": "mimo-v2.5-tts-voicedesign",
+                            "prompt": "成熟温柔并且清晰自然的女性声音",
+                            "preview_text": "这是凭据错误转换测试。",
+                            "display_name": "错误测试",
+                            "public_name": "credential-error-test",
+                        },
+                    )
+                self.assertEqual(response.status_code, 503)
+                self.assertEqual(response.json()["error"]["code"], "credential_store_error")
+
+        asyncio.run(run())
+
     def test_open_storage_directory_uses_platform_opener_or_returns_headless_path(self):
         from app import main
 
@@ -255,7 +349,7 @@ class GatewayEndpointTests(unittest.TestCase):
             with isolated_storage(main):
                 asyncio.run(run())
 
-    def test_public_catalog_hides_demo_and_custom_voice_can_be_renamed(self):
+    def test_public_catalog_includes_demo_and_custom_voice_can_be_renamed(self):
         from app import main
 
         async def run():
@@ -272,8 +366,8 @@ class GatewayEndpointTests(unittest.TestCase):
                     json={"display_name": "不能修改"},
                 )
 
-            self.assertTrue(all(item["provider"] != "demo" for item in models_response.json()))
-            self.assertTrue(all(item["provider"] != "demo" for item in voices_response.json()))
+            self.assertTrue(any(item["provider"] == "demo" for item in models_response.json()))
+            self.assertTrue(any(item["provider"] == "demo" for item in voices_response.json()))
             self.assertEqual(rename_response.status_code, 200)
             renamed = rename_response.json()["voice"]
             self.assertEqual(renamed["display_name"], "新的显示名称")
@@ -744,6 +838,32 @@ class GatewayEndpointTests(unittest.TestCase):
 
             with isolated_storage(main):
                 asyncio.run(run())
+
+    def test_job_delete_keeps_record_when_audio_cannot_be_quarantined(self):
+        from app import main
+
+        async def run():
+            with isolated_storage(main):
+                main.AUDIO.mkdir(parents=True, exist_ok=True)
+                audio = main.AUDIO / "job_locked.wav"
+                audio.write_bytes(b"locked-audio")
+                with main.db() as connection:
+                    connection.execute(
+                        """INSERT INTO jobs
+                           (id,model,voice,input_chars,status,duration_ms,audio_path,created_at,source,demo,input_text)
+                           VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                        ("job_locked", "demo/local-demo", "local-demo", 4, "completed", 100, str(audio), main.now(), "test", 1, "测试"),
+                    )
+                transport = httpx.ASGITransport(app=main.app)
+                with patch("app.routers.jobs.Path.unlink", side_effect=OSError("file is locked")):
+                    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+                        response = await client.delete("/api/jobs/job_locked")
+                self.assertEqual(response.status_code, 500)
+                self.assertTrue(audio.is_file())
+                with main.db() as connection:
+                    self.assertIsNotNone(connection.execute("SELECT 1 FROM jobs WHERE id='job_locked'").fetchone())
+
+        asyncio.run(run())
 
     def test_mimo_voice_design_creates_reusable_local_template_and_preview(self):
         with patch.dict(os.environ, {"VOICE_STUDIO_GATEWAY_KEY": "test_gateway_key"}, clear=False):

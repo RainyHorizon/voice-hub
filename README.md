@@ -41,7 +41,7 @@ API Key、音频、任务历史和音色信息默认保存在本机，不会上�
 
 ### Windows 便携版
 
-1. 在 [Releases](https://github.com/RainyHorizon/voice-studio/releases) 下载 `VoxNest-*-Windows-Portable.zip`。
+1. 在 [Releases](https://github.com/RainyHorizon/VoxNest/releases) 下载 `VoxNest-*-Windows-Portable.zip`。
 2. 将压缩包完整解压到有写入权限的普通文件夹，不要直接在压缩包预览窗口中运行。
 3. 双击 `启动 VoxNest.bat`。
 4. 浏览器打开启动器显示的地址，默认是 `http://127.0.0.1:8765`。
@@ -61,15 +61,15 @@ Release 同时提供 `VoxNest-*-Windows-Setup.exe`。它是 Inno Setup 安装包
 
 安装版与便携版使用相同的程序核心；升级时可以运行新版 Setup 覆盖安装。当前目录更新器会轮询 GitHub 并下载、校验 Portable 包后替换程序文件。首次安装后，Windows 客户端只能通过“检查更新”或启动时轮询发现新版本，GitHub 无法直接向离线客户端推送进程消息。
 
-如果之后把 GitHub 仓库从 `RainyHorizon/voice-studio` 重命名为 `RainyHorizon/voxnest`，需要同步修改 `update.ps1`、`update.sh`、README、Docker Compose 镜像地址和安装包中的项目主页；GitHub 通常会自动重定向旧仓库地址，但更新器的仓库白名单仍应显式切换。
+自动更新器仅信任 `RainyHorizon/VoxNest` 官方仓库，并会在替换程序文件前校验 Release 中提供的 SHA256。
 
 ### Windows 源码启动
 
 先安装 Python 3.11+ 和 FFmpeg，并将它们加入系统 `Path`。如果仓库没有预构建的前端文件，还需要 Node.js 20+。
 
 ```powershell
-git clone https://github.com/RainyHorizon/voice-studio.git
-Set-Location voice-studio
+git clone https://github.com/RainyHorizon/VoxNest.git
+Set-Location VoxNest
 .\start.ps1 -OpenBrowser
 ```
 
@@ -90,8 +90,8 @@ Set-Location voice-studio
 安装 Python 3.11+、FFmpeg/FFprobe，并确保当前用户可以使用系统密钥环（macOS Keychain，或 Linux Secret Service、GNOME Keyring、KWallet）。
 
 ```bash
-git clone https://github.com/RainyHorizon/voice-studio.git
-cd voice-studio
+git clone https://github.com/RainyHorizon/VoxNest.git
+cd VoxNest
 chmod +x start.sh
 ./start.sh --open-browser
 ```
@@ -130,8 +130,8 @@ bash update.sh --check
 Docker 使用环境变量读取厂商密钥，不访问宿主机的系统密钥环。
 
 ```bash
-git clone https://github.com/RainyHorizon/voice-studio.git
-cd voice-studio
+git clone https://github.com/RainyHorizon/VoxNest.git
+cd VoxNest
 cp .env.example .env
 ```
 

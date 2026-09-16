@@ -1,4 +1,4 @@
-param(
+﻿param(
   [ValidateRange(1, 65535)]
   [int]$Port = 0,
   [switch]$OpenBrowser,
@@ -53,6 +53,18 @@ function Get-CommandVersion([string]$Command, [string[]]$Arguments) {
     throw "$Command 无法正常运行（退出码 $exitCode）：$detail"
   }
   return [string]($output | Select-Object -First 1)
+}
+
+function Get-Sha256([string]$Path) {
+  $algorithm = [System.Security.Cryptography.SHA256]::Create()
+  $stream = $null
+  try {
+    $stream = [System.IO.File]::OpenRead($Path)
+    return ([System.BitConverter]::ToString($algorithm.ComputeHash($stream)) -replace "-", "").ToLowerInvariant()
+  } finally {
+    if ($null -ne $stream) { $stream.Dispose() }
+    $algorithm.Dispose()
+  }
 }
 
 try {
@@ -134,7 +146,7 @@ try {
     & $pythonCommand.Source -m venv (Join-Path $backendRoot ".venv")
     if ($LASTEXITCODE -ne 0) { throw "Python 虚拟环境创建失败。" }
   }
-  $requirementsHash = (Get-FileHash -LiteralPath $requirementsFile -Algorithm SHA256).Hash
+  $requirementsHash = Get-Sha256 $requirementsFile
   $installedHash = if (Test-Path $requirementsStamp) { (Get-Content -LiteralPath $requirementsStamp -Raw).Trim() } else { "" }
   if ($requirementsHash -ne $installedHash) {
     Write-Step "正在安装或更新后端依赖"

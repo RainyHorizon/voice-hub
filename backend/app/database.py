@@ -288,6 +288,36 @@ def init_db() -> None:
                 for remote_id, display_name, alias in minimax_voices
             ],
         )
+        # Older builds only checked aliases before inserting. Two concurrent
+        # requests could therefore create duplicate active public names. Repair
+        # any legacy duplicates deterministically after all seed migrations,
+        # then enforce the rule atomically in SQLite.
+        duplicate_aliases = connection.execute(
+            """SELECT public_name FROM voices WHERE status='active'
+               GROUP BY public_name HAVING COUNT(*) > 1"""
+        ).fetchall()
+        for duplicate in duplicate_aliases:
+            rows = connection.execute(
+                """SELECT id, public_name FROM voices
+                   WHERE status='active' AND public_name=? ORDER BY created_at, id""",
+                (duplicate["public_name"],),
+            ).fetchall()
+            for row in rows[1:]:
+                base = row["public_name"][:89]
+                candidate = f"{base}-{row['id'][-8:]}"
+                counter = 2
+                while connection.execute(
+                    "SELECT 1 FROM voices WHERE status='active' AND public_name=?",
+                    (candidate,),
+                ).fetchone():
+                    suffix = f"-{row['id'][-8:]}-{counter}"
+                    candidate = row["public_name"][: 100 - len(suffix)] + suffix
+                    counter += 1
+                connection.execute("UPDATE voices SET public_name=? WHERE id=?", (candidate, row["id"]))
+        connection.execute(
+            """CREATE UNIQUE INDEX IF NOT EXISTS idx_voices_active_public_name
+               ON voices(public_name) WHERE status='active'"""
+        )
         sync_environment_accounts(connection)
         if connection.execute("SELECT COUNT(*) FROM gateway_clients").fetchone()[0] == 0:
             from .gateway_auth import gateway_key

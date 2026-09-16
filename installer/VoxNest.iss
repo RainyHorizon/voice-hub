@@ -1,9 +1,9 @@
 #define MyAppName "VoxNest"
 #define MyAppPublisher "RainyHorizon"
-#define MyAppURL "https://github.com/RainyHorizon/voice-studio"
+#define MyAppURL "https://github.com/RainyHorizon/VoxNest"
 
 #ifndef Version
-  #define Version "1.4.0"
+  #define Version "1.6.0"
 #endif
 #ifndef SourceDir
   #define SourceDir "..\output\installer-stage"

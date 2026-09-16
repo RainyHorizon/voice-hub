@@ -23,7 +23,7 @@ from ..database import db
 
 router = APIRouter(tags=["system"])
 
-GITHUB_REPOSITORY = "RainyHorizon/voice-studio"
+GITHUB_REPOSITORY = "RainyHorizon/VoxNest"
 _update_task: asyncio.Task | None = None
 _update_state: dict[str, Any] = {"status": "idle", "message": ""}
 

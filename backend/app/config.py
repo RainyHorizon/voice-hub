@@ -16,7 +16,7 @@ LOGS = DATA / "logs"
 DB_PATH = DATA / "voice_studio.db"
 FRONTEND_DIST = ROOT / "frontend" / "dist"
 GATEWAY_CONFIG_PATH = DATA / "gateway.json"
-APP_VERSION = os.getenv("VOICE_STUDIO_VERSION", "1.4.0").strip() or "1.4.0"
+APP_VERSION = os.getenv("VOICE_STUDIO_VERSION", "1.6.0").strip() or "1.6.0"
 try:
     APP_PORT = int(os.getenv("VOICE_STUDIO_PORT", "8765"))
 except ValueError:

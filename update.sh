@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-REPOSITORY="RainyHorizon/voice-studio"
+REPOSITORY="RainyHorizon/VoxNest"
 MANIFEST_NAME=".voice-studio-files.txt"
 
 # Run from a temporary copy so a release update can safely replace update.sh.
@@ -88,7 +88,7 @@ update_git_checkout() {
   local remote_url branch upstream counts ahead behind changes commit
   remote_url="$(git -C "$INSTALL_DIR" remote get-url origin 2>/dev/null)" || fail "无法读取 Git origin。"
   case "$remote_url" in
-    https://github.com/RainyHorizon/voice-studio|https://github.com/RainyHorizon/voice-studio.git|git@github.com:RainyHorizon/voice-studio|git@github.com:RainyHorizon/voice-studio.git|ssh://git@github.com/RainyHorizon/voice-studio|ssh://git@github.com/RainyHorizon/voice-studio.git) ;;
+    https://github.com/RainyHorizon/VoxNest|https://github.com/RainyHorizon/VoxNest.git|git@github.com:RainyHorizon/VoxNest|git@github.com:RainyHorizon/VoxNest.git|ssh://git@github.com/RainyHorizon/VoxNest|ssh://git@github.com/RainyHorizon/VoxNest.git) ;;
     *) fail "origin 不是 VoxNest 官方仓库，更新器不会自动拉取：$remote_url" ;;
   esac
 

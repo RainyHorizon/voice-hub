@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import mimetypes
+import sqlite3
 import uuid
 from pathlib import Path
 
@@ -37,7 +38,7 @@ def _write_asset(path: Path, content: bytes) -> None:
 
 def list_voices():
     with db() as connection:
-        rows = connection.execute("SELECT * FROM voices WHERE status='active' AND provider!='demo' ORDER BY created_at DESC").fetchall()
+        rows = connection.execute("SELECT * FROM voices WHERE status='active' ORDER BY created_at DESC").fetchall()
     return [
         {
             **dict(row),
@@ -63,10 +64,17 @@ def voice_already_imported(
                      AND provider_account_id=? AND provider_project_name=? AND status='active'""",
                 (provider, model_id, provider_voice_id, provider_account_id, provider_project_name),
             ).fetchone()
-        elif provider == "minimax":
+        elif provider == "minimax" and provider_account_id:
             row = connection.execute(
-                "SELECT 1 FROM voices WHERE provider=? AND provider_voice_id=? AND status='active'",
-                (provider, provider_voice_id),
+                """SELECT 1 FROM voices WHERE provider=? AND provider_voice_id=?
+                   AND provider_account_id=? AND status='active'""",
+                (provider, provider_voice_id, provider_account_id),
+            ).fetchone()
+        elif provider_account_id:
+            row = connection.execute(
+                """SELECT 1 FROM voices WHERE provider=? AND model_id=? AND provider_voice_id=?
+                   AND provider_account_id=? AND status='active'""",
+                (provider, model_id, provider_voice_id, provider_account_id),
             ).fetchone()
         else:
             row = connection.execute(
@@ -83,7 +91,7 @@ def get_voices():
 
 @router.get("/api/models")
 def list_models():
-    return [{**m.__dict__, "gateway_id": m.gateway_id} for m in available_models() if m.provider != "demo"]
+    return [{**m.__dict__, "gateway_id": m.gateway_id} for m in available_models()]
 
 
 @router.get("/api/voices/cloud/{provider}")
@@ -95,7 +103,7 @@ async def list_cloud_voices(provider: str, provider_account_id: str | None = Non
             provider_account_for,
             provider,
             provider_account_id,
-            require_explicit=provider == "volcengine",
+            require_explicit=True,
         )
         project_name = provider_project_name.strip() if provider == "volcengine" and provider_project_name else None
         if provider == "volcengine":
@@ -171,21 +179,31 @@ async def import_voice(body: ImportVoiceBody):
     display_name = body.display_name.strip()
     if not provider_voice_id or not public_name or not display_name:
         raise HTTPException(400, "音色 ID、显示名称和兼容别名不能为空")
+    try:
+        account = await asyncio.to_thread(
+            provider_account_for,
+            body.provider,
+            body.provider_account_id,
+            require_explicit=True,
+        )
+    except ProviderError as exc:
+        raise HTTPException(exc.status, detail={"message": str(exc), "code": exc.code}) from exc
+    project_name: str | None = None
     def check_duplicates() -> None:
         with db() as connection:
             if connection.execute("SELECT 1 FROM voices WHERE public_name=? AND status='active'", (public_name,)).fetchone():
                 raise HTTPException(409, "兼容别名已存在，请换一个名称")
     await asyncio.to_thread(check_duplicates)
-    if body.provider != "volcengine" and await asyncio.to_thread(voice_already_imported, body.provider, body.model_id, provider_voice_id):
+    if body.provider != "volcengine" and await asyncio.to_thread(
+        voice_already_imported,
+        body.provider,
+        body.model_id,
+        provider_voice_id,
+        account["id"],
+    ):
         raise HTTPException(409, "这个厂商音色 ID 已经导入")
     if body.provider == "volcengine":
         try:
-            account = await asyncio.to_thread(
-                provider_account_for,
-                "volcengine",
-                body.provider_account_id,
-                require_explicit=True,
-            )
             project_name = body.provider_project_name.strip() if body.provider_project_name else account["account_ref"] or ""
             if not project_name:
                 raise ProviderError("请先选择火山项目", code="volcengine_project_not_configured", status=409)
@@ -216,11 +234,14 @@ async def import_voice(body: ImportVoiceBody):
                     json.dumps(body.languages, ensure_ascii=False),
                     now(),
                     None,
-                    account["id"] if body.provider == "volcengine" else None,
-                    (project_name or "") if body.provider == "volcengine" else None,
+                    account["id"],
+                    project_name,
                 ),
             )
-    await asyncio.to_thread(insert)
+    try:
+        await asyncio.to_thread(insert)
+    except sqlite3.IntegrityError as exc:
+        raise HTTPException(409, "兼容别名已存在，请换一个名称") from exc
     return {"id": voice_id, "message": "已有厂商音色已导入，可以直接在合成工作台选择。", "voice": next(v for v in list_voices() if v["id"] == voice_id)}
 
 
@@ -240,26 +261,16 @@ async def import_voices(body: ImportVoicesBody):
         public_name = item.public_name.strip()
         if not provider_voice_id or not display_name or not public_name:
             raise HTTPException(400, "音色 ID、显示名称和兼容别名不能为空")
-        remote_key = (
-            item.provider,
-            "" if item.provider == "minimax" else item.model_id,
-            provider_voice_id,
-            item.provider_account_id or "" if item.provider == "volcengine" else "",
-            item.provider_project_name or "" if item.provider == "volcengine" else "",
-        )
         if public_name in aliases:
             raise HTTPException(409, f"批量导入中存在重复兼容别名：{public_name}")
-        if remote_key in remote_ids:
-            raise HTTPException(409, f"批量导入中存在重复厂商音色：{provider_voice_id}")
-        account = None
-        if item.provider == "volcengine":
-            try:
-                account = await asyncio.to_thread(
-                    provider_account_for,
-                    "volcengine",
-                    item.provider_account_id,
-                    require_explicit=True,
-                )
+        try:
+            account = await asyncio.to_thread(
+                provider_account_for,
+                item.provider,
+                item.provider_account_id,
+                require_explicit=True,
+            )
+            if item.provider == "volcengine":
                 project_name = item.provider_project_name.strip() if item.provider_project_name else account["account_ref"] or ""
                 if not project_name:
                     raise ProviderError("请先选择火山项目", code="volcengine_project_not_configured", status=409)
@@ -271,10 +282,19 @@ async def import_voices(body: ImportVoicesBody):
                         ).fetchone())
                 if not await asyncio.to_thread(check_project):
                     raise ProviderError("所选火山项目不存在，请先同步项目列表", code="volcengine_project_not_found", status=409)
-            except ProviderError as exc:
-                raise HTTPException(exc.status, detail={"message": str(exc), "code": exc.code}) from exc
-        else:
-            project_name = ""
+            else:
+                project_name = ""
+        except ProviderError as exc:
+            raise HTTPException(exc.status, detail={"message": str(exc), "code": exc.code}) from exc
+        remote_key = (
+            item.provider,
+            "" if item.provider == "minimax" else item.model_id,
+            provider_voice_id,
+            account["id"],
+            project_name,
+        )
+        if remote_key in remote_ids:
+            raise HTTPException(409, f"批量导入中存在重复厂商音色：{provider_voice_id}")
         aliases.add(public_name)
         remote_ids.add(remote_key)
         normalized.append((item, provider_voice_id, display_name, public_name, account, project_name))
@@ -286,7 +306,7 @@ async def import_voices(body: ImportVoicesBody):
                     "SELECT 1 FROM voices WHERE public_name=? AND status='active'", (public_name,)
                 ).fetchone():
                     raise HTTPException(409, f"兼容别名已存在：{public_name}")
-                if item.provider == "volcengine" and account and project_name:
+                if item.provider == "volcengine" and project_name:
                     duplicate = connection.execute(
                         """SELECT 1 FROM voices
                            WHERE provider=? AND model_id=? AND provider_voice_id=?
@@ -295,13 +315,15 @@ async def import_voices(body: ImportVoicesBody):
                     ).fetchone()
                 elif item.provider == "minimax":
                     duplicate = connection.execute(
-                        "SELECT 1 FROM voices WHERE provider=? AND provider_voice_id=? AND status='active'",
-                        (item.provider, provider_voice_id),
+                        """SELECT 1 FROM voices WHERE provider=? AND provider_voice_id=?
+                           AND provider_account_id=? AND status='active'""",
+                        (item.provider, provider_voice_id, account["id"]),
                     ).fetchone()
                 else:
                     duplicate = connection.execute(
-                        "SELECT 1 FROM voices WHERE provider=? AND model_id=? AND provider_voice_id=? AND status='active'",
-                        (item.provider, item.model_id, provider_voice_id),
+                        """SELECT 1 FROM voices WHERE provider=? AND model_id=? AND provider_voice_id=?
+                           AND provider_account_id=? AND status='active'""",
+                        (item.provider, item.model_id, provider_voice_id, account["id"]),
                     ).fetchone()
                 if duplicate:
                     raise HTTPException(409, f"厂商音色已经导入：{provider_voice_id}")
@@ -326,12 +348,15 @@ async def import_voices(body: ImportVoicesBody):
                         json.dumps(item.languages, ensure_ascii=False),
                         now(),
                         None,
-                        account["id"] if account else None,
-                        project_name if account else None,
+                        account["id"],
+                        project_name or None,
                     ),
                 )
             return created_ids
-    created_ids = await asyncio.to_thread(check_and_insert)
+    try:
+        created_ids = await asyncio.to_thread(check_and_insert)
+    except sqlite3.IntegrityError as exc:
+        raise HTTPException(409, "批量导入中存在已被其他请求占用的兼容别名") from exc
     voices_by_id = {item["id"]: item for item in list_voices()}
     created = [voices_by_id[voice_id] for voice_id in created_ids]
     return {
@@ -509,7 +534,10 @@ async def clone_voice(provider_name: str, model_id: str, display_name: str, publ
                     (project_name or "") if account else None,
                 ),
             )
-    await asyncio.to_thread(insert)
+    try:
+        await asyncio.to_thread(insert)
+    except sqlite3.IntegrityError as exc:
+        raise HTTPException(409, "兼容别名已存在，请换一个名称") from exc
     if provider_name == "dashscope":
         message = "千问远端克隆音色已创建，可直接使用所选模型合成。"
         if clone_result and clone_result.get("fallback_mode"):
@@ -551,8 +579,8 @@ async def design_voice(body: VoiceDesignBody):
     preview_asset: str | None = None
     request_id = ""
     message = ""
-    adapter = await asyncio.to_thread(provider_for, body.provider)
     try:
+        adapter = await asyncio.to_thread(provider_for, body.provider)
         if body.provider == "dashscope" and isinstance(adapter, QwenProvider):
             result = await adapter.create_voice_design(
                 prompt,
@@ -611,7 +639,12 @@ async def design_voice(body: VoiceDesignBody):
                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (voice_id, body.provider, body.model_id, provider_voice_id, display_name, public_name, "design", "active", json.dumps(model.languages, ensure_ascii=False), now(), preview_asset, prompt),
             )
-    await asyncio.to_thread(insert)
+    try:
+        await asyncio.to_thread(insert)
+    except sqlite3.IntegrityError as exc:
+        if preview_asset:
+            await asyncio.to_thread((config.ROOT / preview_asset).unlink, missing_ok=True)
+        raise HTTPException(409, "兼容别名已存在，请换一个名称") from exc
     voice = next(item for item in list_voices() if item["id"] == voice_id)
     return {"id": voice_id, "message": message, "request_id": request_id, "persistent": body.provider != "mimo", "voice": voice}
 

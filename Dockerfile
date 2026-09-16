@@ -8,7 +8,7 @@ COPY frontend/ ./
 RUN npm run build
 
 FROM python:3.12-slim AS runtime
-ARG VERSION=1.4.0
+ARG VERSION=1.6.0
 ARG REVISION=unknown
 ARG CREATED=unknown
 
@@ -17,7 +17,7 @@ LABEL org.opencontainers.image.title="VoxNest" \
       org.opencontainers.image.version="$VERSION" \
       org.opencontainers.image.revision="$REVISION" \
       org.opencontainers.image.created="$CREATED" \
-      org.opencontainers.image.source="https://github.com/RainyHorizon/voice-studio"
+      org.opencontainers.image.source="https://github.com/RainyHorizon/VoxNest"
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \

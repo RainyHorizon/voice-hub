@@ -3,6 +3,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -85,6 +86,8 @@ export function StudioProvider({ children }: { children: ReactNode }) {
   const [updateInstallable, setUpdateInstallable] = useState(false);
   const [updateInstalling, setUpdateInstalling] = useState(false);
   const [gateway, setGateway] = useState<Gateway | null>(null);
+  const synthesisAbortRef = useRef<AbortController | null>(null);
+  const synthesisRequestRef = useRef(0);
   const selectedModel = useMemo(
     () => models.find((item) => item.gateway_id === model),
     [models, model],
@@ -111,21 +114,21 @@ export function StudioProvider({ children }: { children: ReactNode }) {
       if (cancelled) return;
       const failures: string[] = [];
       if (voicesResult.status === "fulfilled") {
-        const realVoices = voicesResult.value.filter((item) => item.provider !== "demo");
-        setVoices(realVoices);
+        const availableVoices = voicesResult.value;
+        setVoices(availableVoices);
         setVoice((current) =>
-          realVoices.some((item) => item.public_name === current) ? current : "",
+          availableVoices.some((item) => item.public_name === current) ? current : "",
         );
       } else {
         failures.push("音色库");
       }
       if (modelsResult.status === "fulfilled") {
-        const realModels = modelsResult.value.filter((item) => item.provider !== "demo");
-        setModels(realModels);
+        const availableModels = modelsResult.value;
+        setModels(availableModels);
         setModel((current) =>
-          realModels.some((item) => item.gateway_id === current)
+          availableModels.some((item) => item.gateway_id === current)
             ? current
-            : realModels.find((item) => item.operations.includes("synthesis"))?.gateway_id || "",
+            : availableModels.find((item) => item.operations.includes("synthesis"))?.gateway_id || "",
         );
       } else {
         failures.push("模型列表");
@@ -180,6 +183,7 @@ export function StudioProvider({ children }: { children: ReactNode }) {
     },
     [audioUrl],
   );
+  useEffect(() => () => synthesisAbortRef.current?.abort(), []);
   useEffect(() => {
     const firstCompatible = voices.find((item) =>
       voiceMatchesModel(item, selectedModel),
@@ -193,6 +197,14 @@ export function StudioProvider({ children }: { children: ReactNode }) {
       .catch(() => undefined);
   const synthesize = async () => {
     if (!text.trim()) return setNotice("请先输入要合成的文本");
+    if (text.length > 10000) return setNotice("合成文本不能超过 10,000 个字符");
+    if (!selectedModel) return setNotice("请先选择合成模型");
+    if (!selectedVoice || !voiceMatchesModel(selectedVoice, selectedModel))
+      return setNotice("请先选择与当前模型兼容的音色");
+    synthesisAbortRef.current?.abort();
+    const controller = new AbortController();
+    synthesisAbortRef.current = controller;
+    const requestId = ++synthesisRequestRef.current;
     setBusy(true);
     setNotice(
       selectedModel?.mode === "provider"
@@ -218,16 +230,27 @@ export function StudioProvider({ children }: { children: ReactNode }) {
               ? instructions || undefined
               : undefined,
         }),
+        signal: controller.signal,
       });
       if (!response.ok) throw new Error(await responseError(response));
       const blob = await response.blob();
-      setAudioUrl(URL.createObjectURL(blob));
+      if (controller.signal.aborted || requestId !== synthesisRequestRef.current) return;
+      const nextAudioUrl = URL.createObjectURL(blob);
+      if (controller.signal.aborted || requestId !== synthesisRequestRef.current) {
+        URL.revokeObjectURL(nextAudioUrl);
+        return;
+      }
+      setAudioUrl(nextAudioUrl);
       setNotice("已生成，可试听或下载");
       await refreshJobs();
     } catch (error) {
+      if (controller.signal.aborted || requestId !== synthesisRequestRef.current) return;
       setNotice(error instanceof Error ? error.message : "生成失败");
     } finally {
-      setBusy(false);
+      if (requestId === synthesisRequestRef.current) {
+        setBusy(false);
+        if (synthesisAbortRef.current === controller) synthesisAbortRef.current = null;
+      }
     }
   };
   const importVoice = async (config: ImportVoiceConfig) => {

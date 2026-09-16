@@ -14,7 +14,7 @@
 3. 确认显示的当前版本和 GitHub 最新正式版本，输入 `Y` 开始更新。
 4. 更新完成后可直接选择重新启动。
 
-更新器会自动识别当前的 Windows 安装方式。便携版只从 `RainyHorizon/voice-studio` 的 GitHub Releases 下载 Windows Portable 版本，并在替换程序前验证 SHA256。`data` 文件夹、Windows Credential Manager 中的厂商密钥以及目录内其他非程序文件不会被删除。
+更新器会自动识别当前的 Windows 安装方式。便携版只从 `RainyHorizon/VoxNest` 的 GitHub Releases 下载 Windows Portable 版本，并在替换程序前验证 SHA256。`data` 文件夹、Windows Credential Manager 中的厂商密钥以及目录内其他非程序文件不会被删除。
 
 首次获得更新器之前安装的旧版本，仍需手动下载一次包含更新器的新便携版；以后即可使用这个入口更新。
 

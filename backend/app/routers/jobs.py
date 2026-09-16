@@ -4,8 +4,10 @@ from __future__ import annotations
 import json
 import mimetypes
 import os
+import shutil
 import sqlite3
 import tempfile
+import uuid
 import zipfile
 from datetime import datetime
 from pathlib import Path
@@ -89,16 +91,88 @@ def _safe_existing_audio_path(row: sqlite3.Row) -> Path | None:
 
 
 def _delete_job_rows(rows: list[sqlite3.Row]) -> tuple[int, int]:
-    audio_paths = {path for row in rows if (path := _safe_existing_audio_path(row)) is not None}
-    with db() as connection:
-        connection.executemany("DELETE FROM jobs WHERE id=?", [(row["id"],) for row in rows])
-    deleted_bytes = 0
-    for path in audio_paths:
+    selected_ids = {row["id"] for row in rows}
+    selected_audio_paths = {
+        row["audio_path"]
+        for row in rows
+        if row["audio_path"] and _safe_existing_audio_path(row) is not None
+    }
+    quarantine = config.DATA / "delete-trash" / ("jobs_" + uuid.uuid4().hex)
+    backups: list[tuple[Path, Path, int]] = []
+    quarantine.mkdir(parents=True, exist_ok=True)
+    try:
+        with db() as connection:
+            # Do not remove an audio file that is still referenced by a job
+            # outside this deletion batch.
+            shared_paths = {
+                item["audio_path"]
+                for item in connection.execute(
+                    "SELECT id, audio_path FROM jobs WHERE audio_path IS NOT NULL"
+                ).fetchall()
+                if item["id"] not in selected_ids and item["audio_path"] in selected_audio_paths
+            }
+            for row in rows:
+                if not row["audio_path"] or row["audio_path"] in shared_paths:
+                    continue
+                path = _safe_existing_audio_path(row)
+                if path is None or any(original == path for original, _, _ in backups):
+                    continue
+                size = path.stat().st_size
+                target = quarantine / f"{len(backups):04d}_{path.name}"
+                try:
+                    os.link(path, target)
+                except OSError:
+                    shutil.copy2(path, target)
+                backups.append((path, target, size))
+                # Keep the backup until the database commit succeeds. This
+                # lets us restore the live path if SQLite fails after unlink.
+                path.unlink()
+            connection.executemany("DELETE FROM jobs WHERE id=?", [(row["id"],) for row in rows])
+    except Exception as exc:
+        for original, target, _ in reversed(backups):
+            if target.exists():
+                if not original.exists():
+                    original.parent.mkdir(parents=True, exist_ok=True)
+                    target.replace(original)
+                else:
+                    try:
+                        target.unlink()
+                    except OSError:
+                        pass
         try:
-            deleted_bytes += path.stat().st_size
-            path.unlink(missing_ok=True)
+            quarantine.rmdir()
         except OSError:
             pass
+        if isinstance(exc, HTTPException):
+            raise
+        raise HTTPException(500, "删除任务失败，任务记录和音频均已保留") from exc
+
+    # The database commit succeeded. Quarantined copies are now safe to purge;
+    # a transient purge failure is retried by the next deletion.
+    deleted_bytes = 0
+    for _, target, size in backups:
+        try:
+            target.unlink(missing_ok=True)
+            deleted_bytes += size
+        except OSError:
+            pass
+    try:
+        quarantine.rmdir()
+        parent = quarantine.parent
+        for stale in parent.glob("jobs_*"):
+            if not stale.is_dir():
+                continue
+            for item in stale.iterdir():
+                try:
+                    item.unlink(missing_ok=True)
+                except OSError:
+                    pass
+            if not any(stale.iterdir()):
+                stale.rmdir()
+        if not any(parent.iterdir()):
+            parent.rmdir()
+    except OSError:
+        pass
     return len(rows), deleted_bytes
 
 

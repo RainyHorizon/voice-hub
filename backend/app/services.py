@@ -87,7 +87,7 @@ def resolve_voice(voice_id: str, model):
     with db() as connection:
         if model.mode == "demo":
             row = connection.execute(
-                "SELECT * FROM voices WHERE provider=? AND (id=? OR public_name=? OR provider_voice_id=?)",
+                "SELECT * FROM voices WHERE provider=? AND (id=? OR public_name=? OR provider_voice_id=?) AND status='active'",
                 (model.provider, target, target, target),
             ).fetchone()
         elif model.provider == "minimax":
@@ -97,7 +97,7 @@ def resolve_voice(voice_id: str, model):
             ).fetchone()
         else:
             row = connection.execute(
-                "SELECT * FROM voices WHERE provider=? AND model_id=? AND (id=? OR public_name=? OR provider_voice_id=?)",
+                "SELECT * FROM voices WHERE provider=? AND model_id=? AND (id=? OR public_name=? OR provider_voice_id=?) AND status='active'",
                 (model.provider, model.model_id, target, target, target),
             ).fetchone()
     if row:

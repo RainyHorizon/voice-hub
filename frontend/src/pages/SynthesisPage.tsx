@@ -15,6 +15,9 @@ export function SynthesisPage() {
   const synthesisModels = p.models.filter((item) =>
     item.operations.includes("synthesis"),
   );
+  const synthesisProviderIds = ["demo", ...credentialProviderIds].filter((id) =>
+    synthesisModels.some((item) => item.provider === id),
+  );
   const selectedProvider =
     p.selectedModel?.provider || synthesisModels[0]?.provider || "";
   const providerModels = synthesisModels.filter(
@@ -63,6 +66,7 @@ export function SynthesisPage() {
           <textarea
             value={p.text}
             onChange={(e) => p.setText(e.target.value)}
+            maxLength={10000}
             spellCheck={false}
           />
           <div className="editor-footer">
@@ -79,7 +83,7 @@ export function SynthesisPage() {
           </div>
           <div>
             <span>调用方式</span>
-            <strong>厂商 API</strong>
+            <strong>{p.selectedModel?.mode === "demo" ? "本地演示" : "厂商 API"}</strong>
           </div>
           <div>
             <span>输出</span>
@@ -91,13 +95,13 @@ export function SynthesisPage() {
         <h3 id="synthesis-settings-title"><Settings2 size={18} />设置</h3>
         <div className="synthesis-settings-grid">
           <label>服务来源<select value={selectedProvider} onChange={(event) => chooseProvider(event.target.value)}>
-            {credentialProviderIds.filter((id) => synthesisModels.some((item) => item.provider === id)).map((id) => <option value={id} key={id}>{providerMeta[id].label}</option>)}
+            {synthesisProviderIds.map((id) => <option value={id} key={id}>{providerMeta[id].label}</option>)}
           </select></label>
           <div className="synthesis-model-field">
             <label>模型<select value={p.model} onChange={(event) => p.setModel(event.target.value)}>
               {providerModels.map((item) => <option value={item.gateway_id} key={item.gateway_id}>{item.display_name}</option>)}
             </select></label>
-            {p.selectedModel && <div className="model-meta"><span className={`provider-mark ${providerMeta[p.selectedModel.provider]?.tone}`}>{providerMeta[p.selectedModel.provider]?.mark}</span><div><strong>{p.selectedModel.quality}质感</strong><small>{p.selectedModel.latency}响应 · 厂商接口</small></div></div>}
+            {p.selectedModel && <div className="model-meta"><span className={`provider-mark ${providerMeta[p.selectedModel.provider]?.tone}`}>{providerMeta[p.selectedModel.provider]?.mark}</span><div><strong>{p.selectedModel.quality}质感</strong><small>{p.selectedModel.latency}响应 · {p.selectedModel.mode === "demo" ? "本地演示" : "厂商接口"}</small></div></div>}
           </div>
           <div className="synthesis-voice-field">
             <label>音色<select value={selectedVoiceValue} onChange={(event) => p.setVoice(event.target.value)} disabled={!compatibleVoices.length}>
@@ -121,7 +125,7 @@ export function SynthesisPage() {
             <div className="segmented">{["wav", "mp3"].map((item) => <button className={p.format === item ? "selected" : ""} type="button" onClick={() => p.setFormat(item)} key={item}>{item.toUpperCase()}</button>)}</div>
           </div>
         </div>
-        <div className="control-note"><Gauge size={16} /><span>当前模型会调用已保存的厂商凭据，结果来自对应厂商的语音服务。</span></div>
+        <div className="control-note"><Gauge size={16} /><span>{p.selectedModel?.mode === "demo" ? "本地演示无需配置厂商凭据，可直接生成测试音频。" : "当前模型会调用已保存的厂商凭据，结果来自对应厂商的语音服务。"}</span></div>
       </section>
       <div className="generate-row">
         <button className="primary-button" onClick={() => void p.synthesize()} disabled={p.busy || !selectedVoiceValue}><Sparkles size={17} />{p.busy ? "生成中..." : "生成语音"}</button>

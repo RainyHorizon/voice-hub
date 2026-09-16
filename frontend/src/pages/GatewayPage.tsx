@@ -20,6 +20,7 @@ import {
   X,
 } from "lucide-react";
 import { api, responseError } from "../api";
+import { pcmChunksToWavBlob, type PcmInfo } from "../audio";
 import { WorkspaceHero } from "../components/WorkspaceHero";
 import { handleTabListKeyDown } from "../components/tabs";
 import { useStudio } from "../context/StudioContext";
@@ -204,13 +205,14 @@ export function GatewayPage() {
     setSpeechTest({ status: "idle" });
     setStreamTest({ status: "running" });
     const started = performance.now();
-    const audioParts: BlobPart[] = [];
+    const audioParts: Uint8Array[] = [];
     let chunkCount = 0;
     let totalBytes = 0;
     let firstChunkLatency: number | undefined;
     let nativeStreaming = false;
     let jobId = "";
     let receivedFormat = streamFormat;
+    let pcmInfo: PcmInfo | undefined;
     try {
       const response = await fetch(endpoint("audio/speech/stream"), {
         method: "POST",
@@ -231,14 +233,14 @@ export function GatewayPage() {
           if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
         }
         if (!dataLines.length) return;
-        const data = JSON.parse(dataLines.join("\n")) as { audio?: string; job_id?: string; format?: string; native_streaming?: boolean; error?: { message?: string } };
+        const data = JSON.parse(dataLines.join("\n")) as { audio?: string; job_id?: string; format?: string; native_streaming?: boolean; pcm?: PcmInfo; error?: { message?: string } };
         if (event === "error") throw new Error(data.error?.message || "流式语音生成失败");
         if (event === "audio" && data.audio) {
           if (firstChunkLatency === undefined) firstChunkLatency = Math.round(performance.now() - started);
           const binary = atob(data.audio);
           const bytes = new Uint8Array(binary.length);
           for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
-          audioParts.push(bytes as unknown as BlobPart);
+          audioParts.push(bytes);
           chunkCount += 1;
           totalBytes += bytes.byteLength;
         }
@@ -246,6 +248,7 @@ export function GatewayPage() {
           jobId = data.job_id || jobId;
           nativeStreaming = Boolean(data.native_streaming);
           if (data.format) receivedFormat = data.format;
+          if (data.pcm) pcmInfo = data.pcm;
         }
       };
       while (true) {
@@ -259,7 +262,11 @@ export function GatewayPage() {
       if (buffer.trim()) consume(buffer);
       if (!audioParts.length) throw new Error("流式响应没有音频分片");
       if (streamAudioUrl) URL.revokeObjectURL(streamAudioUrl);
-      const blob = new Blob(audioParts, { type: receivedFormat === "mp3" ? "audio/mpeg" : "application/octet-stream" });
+      const blob = receivedFormat === "pcm"
+        ? pcmChunksToWavBlob(audioParts, pcmInfo || { sample_rate: 0, channels: 0, bit_depth: 0 })
+        : new Blob(audioParts.map((part) => part.buffer as ArrayBuffer), {
+            type: receivedFormat === "mp3" ? "audio/mpeg" : receivedFormat === "wav" ? "audio/wav" : "application/octet-stream",
+          });
       setStreamAudioUrl(URL.createObjectURL(blob));
       setStreamTest({
         status: "success",
@@ -572,7 +579,7 @@ export function GatewayPage() {
             </>}
             {streamTest.status === "success" && <>
               <div className="result-metrics stream-metrics"><div><span>首片</span><strong>{streamTest.firstChunkLatency}ms</strong></div><div><span>总耗时</span><strong>{streamTest.latency}ms</strong></div><div><span>分片</span><strong>{streamTest.chunks}</strong></div><div><span>大小</span><strong>{formatBytes(streamTest.size)}</strong></div></div>
-              {streamAudioUrl && <div className="test-player">{streamTest.format === "pcm" ? <><Volume2 size={16} /><span className="test-audio-note">PCM 原始数据（24kHz / 16-bit / 单声道）</span></> : <><Volume2 size={16} /><audio controls src={streamAudioUrl} /></>}<a className="download-button" href={streamAudioUrl} download={`gateway-stream.${streamTest.format || "mp3"}`} title="下载流式音频"><Download size={16} /></a></div>}
+              {streamAudioUrl && <div className="test-player"><Volume2 size={16} /><audio controls src={streamAudioUrl} />{streamTest.format === "pcm" && <span className="test-audio-note">PCM 已封装为 WAV 供试听</span>}<a className="download-button" href={streamAudioUrl} download={`gateway-stream.${streamTest.format === "pcm" ? "wav" : streamTest.format || "mp3"}`} title="下载流式音频"><Download size={16} /></a></div>}
               <div className="result-detail"><span>状态</span><code>{streamTest.message}</code><span>格式</span><code>{streamTest.format || "mp3"}</code><span>HTTP</span><code>{streamTest.statusCode}</code>{streamTest.nativeStreaming !== undefined && <><span>上游</span><code>{streamTest.nativeStreaming ? "原生分片" : "网关兼容分片"}</code></>}{streamTest.jobId && <><span>Job</span><code>{streamTest.jobId}</code></>}</div>
             </>}
           </div>

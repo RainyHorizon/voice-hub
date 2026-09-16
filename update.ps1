@@ -1,4 +1,4 @@
-param(
+﻿param(
   [string]$InstallDirectory = "",
   [switch]$CheckOnly,
   [switch]$Yes
@@ -6,11 +6,23 @@ param(
 
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
-$repository = "RainyHorizon/voice-studio"
+$repository = "RainyHorizon/VoxNest"
 $managedManifestName = ".voice-studio-files.txt"
 
 function Write-Step([string]$Message) {
   Write-Host "[VoxNest] $Message" -ForegroundColor Cyan
+}
+
+function Get-Sha256([string]$Path) {
+  $algorithm = [System.Security.Cryptography.SHA256]::Create()
+  $stream = $null
+  try {
+    $stream = [System.IO.File]::OpenRead($Path)
+    return ([System.BitConverter]::ToString($algorithm.ComputeHash($stream)) -replace "-", "").ToUpperInvariant()
+  } finally {
+    if ($null -ne $stream) { $stream.Dispose() }
+    $algorithm.Dispose()
+  }
 }
 
 function Resolve-InstallDirectory([string]$Directory) {
@@ -177,7 +189,7 @@ function Update-GitCheckout([string]$Root) {
   if (-not $git) { throw "这是 Git 源码目录，但系统中没有可用的 Git。" }
 
   $remoteUrl = [string](Invoke-Git $git.Source $Root @("remote", "get-url", "origin") | Select-Object -First 1)
-  if ($remoteUrl.Trim() -notmatch '^(?i)(https://github\.com/RainyHorizon/voice-studio(?:\.git)?|git@github\.com:RainyHorizon/voice-studio(?:\.git)?|ssh://git@github\.com/RainyHorizon/voice-studio(?:\.git)?)$') {
+  if ($remoteUrl.Trim() -notmatch '^(?i)(https://github\.com/RainyHorizon/VoxNest(?:\.git)?|git@github\.com:RainyHorizon/VoxNest(?:\.git)?|ssh://git@github\.com/RainyHorizon/VoxNest(?:\.git)?)$') {
     throw "origin 不是 VoxNest 官方仓库，更新器不会自动拉取：$($remoteUrl.Trim())"
   }
 
@@ -365,7 +377,7 @@ function Update-ReleasePackage([string]$Root, [string]$InstallType) {
     $checksumText = Get-Content -LiteralPath $checksumPath -Raw -Encoding ASCII
     if ($checksumText -notmatch '(?i)\b([0-9a-f]{64})\b') { throw "SHA256 校验文件格式无效。" }
     $expectedHash = $Matches[1].ToUpperInvariant()
-    $actualHash = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash.ToUpperInvariant()
+    $actualHash = Get-Sha256 $archivePath
     if ($actualHash -ne $expectedHash) { throw "下载文件的 SHA256 不匹配，已停止更新。" }
     Write-Host "SHA256 校验通过。" -ForegroundColor Green
 

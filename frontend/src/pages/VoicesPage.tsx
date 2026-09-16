@@ -318,9 +318,9 @@ function ImportVoiceDialog({
   const providerModels = importModels.filter(
     (item) => item.provider === provider,
   );
-  const volcengineAccounts = useMemo(
-    () => providerAccounts.filter((item) => item.provider === "volcengine"),
-    [providerAccounts],
+  const selectedProviderAccounts = useMemo(
+    () => providerAccounts.filter((item) => item.provider === provider),
+    [provider, providerAccounts],
   );
 
   useEffect(() => {
@@ -330,13 +330,12 @@ function ImportVoiceDialog({
   }, []);
 
   useEffect(() => {
-    if (provider !== "volcengine") return;
     setProviderAccountId((current) =>
-      volcengineAccounts.some((item) => item.id === current)
+      selectedProviderAccounts.some((item) => item.id === current)
         ? current
-        : volcengineAccounts[0]?.id || "",
+        : selectedProviderAccounts[0]?.id || "",
     );
-  }, [provider, volcengineAccounts]);
+  }, [selectedProviderAccounts]);
   useEffect(() => {
     if (provider !== "volcengine" || !providerAccountId) return;
     api<{ projects: ProviderProject[] }>(
@@ -373,7 +372,6 @@ function ImportVoiceDialog({
     setSelected([]);
     setEdits({});
     setMessage("");
-    if (next !== "volcengine") setProviderAccountId("");
   };
   const chooseMode = (next: "sync" | "manual") => {
     setMode(next);
@@ -383,8 +381,8 @@ function ImportVoiceDialog({
   };
   const loadCloudVoices = async () => {
     if (!syncProviders.includes(provider)) return;
-    if (provider === "volcengine" && !providerAccountId) {
-      setMessage("请先在设置中保存火山引擎项目配置。");
+    if (!providerAccountId) {
+      setMessage(`请先在设置中保存${providerMeta[provider]?.label || "厂商"}账号配置。`);
       return;
     }
     setWorking(true);
@@ -392,9 +390,11 @@ function ImportVoiceDialog({
     try {
       const result = await api<{ voices: CloudVoice[] }>(
         `/api/voices/cloud/${provider}${
-          provider === "volcengine"
-            ? `?provider_account_id=${encodeURIComponent(providerAccountId)}&provider_project_name=${encodeURIComponent(providerProjectName)}`
-            : ""
+          `?provider_account_id=${encodeURIComponent(providerAccountId)}${
+            provider === "volcengine"
+              ? `&provider_project_name=${encodeURIComponent(providerProjectName)}`
+              : ""
+          }`
         }`,
       );
       setCloudVoices(result.voices);
@@ -424,8 +424,8 @@ function ImportVoiceDialog({
       !modelId
     )
       return;
-    if (provider === "volcengine" && !providerAccountId) {
-      setMessage("请先选择火山引擎项目。");
+    if (!providerAccountId) {
+      setMessage("请先选择厂商账号。");
       return;
     }
     setWorking(true);
@@ -438,7 +438,7 @@ function ImportVoiceDialog({
         display_name: displayName.trim(),
         public_name: publicName.trim(),
         languages: ["zh-CN"],
-          provider_account_id: provider === "volcengine" ? providerAccountId : undefined,
+          provider_account_id: providerAccountId,
           provider_project_name: provider === "volcengine" ? providerProjectName : undefined,
       });
     } catch (error) {
@@ -554,11 +554,10 @@ function ImportVoiceDialog({
               </select>
             </div>
           </div>
-          {provider === "volcengine" && (
-            <div className="import-project-field">
-              <label htmlFor="import-volcengine-account">火山账号</label>
+          <div className="import-project-field">
+              <label htmlFor="import-provider-account">厂商账号</label>
               <select
-                id="import-volcengine-account"
+                id="import-provider-account"
                 value={providerAccountId}
                 onChange={(event) => {
                   setProviderAccountId(event.target.value);
@@ -568,16 +567,16 @@ function ImportVoiceDialog({
                   setEdits({});
                   setMessage("");
                 }}
-                disabled={!volcengineAccounts.length}
+                disabled={!selectedProviderAccounts.length}
               >
-                {!volcengineAccounts.length && <option value="">尚未配置项目</option>}
-                {volcengineAccounts.map((account) => (
+                {!selectedProviderAccounts.length && <option value="">尚未配置账号</option>}
+                {selectedProviderAccounts.map((account) => (
                   <option value={account.id} key={account.id}>
                     {account.display_name}
                   </option>
                 ))}
               </select>
-              <label htmlFor="import-volcengine-project">项目</label>
+              {provider === "volcengine" && <><label htmlFor="import-volcengine-project">项目</label>
               <select
                 id="import-volcengine-project"
                 value={providerProjectName}
@@ -597,9 +596,8 @@ function ImportVoiceDialog({
                     {project.display_name !== project.project_name ? ` · ${project.project_name}` : ""}
                   </option>
                 ))}
-              </select>
+              </select></>}
             </div>
-          )}
           {mode === "sync" ? (
             <>
               <div className="sync-toolbar">
@@ -610,7 +608,7 @@ function ImportVoiceDialog({
                 <button
                   className="secondary-button"
                   onClick={loadCloudVoices}
-                  disabled={working || (provider === "volcengine" && (!providerAccountId || !providerProjectName))}
+                  disabled={working || !providerAccountId || (provider === "volcengine" && !providerProjectName)}
                 >
                   <RefreshCw size={14} className={working ? "spinning" : ""} />
                   {working ? "正在读取" : "读取云端音色"}
