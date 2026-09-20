@@ -50,6 +50,12 @@ jobs:
             exit 1
           fi
           echo "value=${version}" >> "${GITHUB_OUTPUT}"
+          echo "versioned_tag=v${version}" >> "${GITHUB_OUTPUT}"
+          if [[ "${version}" == *-* ]]; then
+            echo "stable=false" >> "${GITHUB_OUTPUT}"
+          else
+            echo "stable=true" >> "${GITHUB_OUTPUT}"
+          fi
 
       - name: Extract image metadata
         id: meta
@@ -62,7 +68,9 @@ jobs:
             type=ref,event=tag
             type=semver,pattern={{version}},enable=${{ github.event_name == 'push' }}
             type=raw,value=${{ steps.version.outputs.value }},enable=${{ github.event_name == 'workflow_dispatch' }}
+            type=raw,value=${{ steps.version.outputs.versioned_tag }},enable=${{ github.event_name == 'workflow_dispatch' }}
             type=raw,value=latest,enable=${{ github.event_name == 'push' && !contains(github.ref_name, '-') }}
+            type=raw,value=latest,enable=${{ github.event_name == 'workflow_dispatch' && steps.version.outputs.stable == 'true' }}
 
       - name: Build and push multi-platform image
         uses: docker/build-push-action@v6
