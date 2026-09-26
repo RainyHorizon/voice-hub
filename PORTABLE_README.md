@@ -1,20 +1,20 @@
-# VoxNest Windows 便携版
+# Voice Hub Windows 便携版
 
 ## 使用方法
 
 1. 将压缩包完整解压到普通文件夹，不要直接在压缩包预览窗口中运行。
-2. 双击 `启动 VoxNest.bat`。
-3. 等待浏览器自动打开 VoxNest。
-4. 使用期间不要关闭启动窗口；也可以双击 `停止 VoxNest.bat` 停止服务。
+2. 双击 `启动 Voice Hub.bat`。
+3. 等待浏览器自动打开 Voice Hub。
+4. 使用期间不要关闭启动窗口；也可以双击 `停止 Voice Hub.bat` 停止服务。
 
 ## 更新
 
-1. 先关闭正在运行的 VoxNest。
-2. 双击 `更新 VoxNest.bat`。
+1. 先关闭正在运行的 Voice Hub。
+2. 双击 `更新 Voice Hub.bat`。
 3. 确认显示的当前版本和 GitHub 最新正式版本，输入 `Y` 开始更新。
 4. 更新完成后可直接选择重新启动。
 
-更新器会自动识别当前的 Windows 安装方式。便携版只从 `RainyHorizon/VoxNest` 的 GitHub Releases 下载 Windows Portable 版本，并在替换程序前验证 SHA256。`data` 文件夹、Windows Credential Manager 中的厂商密钥以及目录内其他非程序文件不会被删除。
+更新器会自动识别当前的 Windows 安装方式。便携版只从 `RainyHorizon/voice-hub` 的 GitHub Releases 下载 Windows Portable 版本，并在替换程序前验证 SHA256。`data` 文件夹、Windows Credential Manager 中的厂商密钥以及目录内其他非程序文件不会被删除。
 
 首次获得更新器之前安装的旧版本，仍需手动下载一次包含更新器的新便携版；以后即可使用这个入口更新。
 
@@ -31,7 +31,7 @@
 - 如果 Windows 提示来源未知，请先确认文件来自本项目的 GitHub Releases 页面。当前版本尚未进行商业代码签名。
 - 如果程序目录不可写，请将整个文件夹移动到桌面、文档或其他普通目录，不要放在 `Program Files` 中。
 - 如果默认端口 `8765` 被占用，程序会自动尝试 `8766` 至 `8790`。
-- 需要查看完整诊断时，在 PowerShell 中运行 `.\VoxNest.exe --check`。
+- 需要查看完整诊断时，在 PowerShell 中运行 `.\VoiceHub.exe --check`。
 
 完整项目文档请查看 `README.md`。
 

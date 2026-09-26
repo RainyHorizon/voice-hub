@@ -242,7 +242,7 @@ export function HistoryPage() {
       const url = URL.createObjectURL(await response.blob());
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = "voice-studio-selected-jobs.zip";
+      anchor.download = "voice-hub-selected-jobs.zip";
       anchor.click();
       URL.revokeObjectURL(url);
       setMessage("ZIP 已开始下载");

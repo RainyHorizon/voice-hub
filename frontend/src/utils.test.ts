@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Model, Voice } from "./types";
-import { formatBytes, titleFor, voiceMatchesModel } from "./utils";
+import { apiTestModels, formatBytes, titleFor, voiceMatchesModel } from "./utils";
 
 const model = (provider: string, modelId: string): Model => ({
   provider,
@@ -36,6 +36,15 @@ describe("voiceMatchesModel", () => {
 
   it("rejects a voice from another provider", () => {
     expect(voiceMatchesModel(voice("dashscope", "qwen3-tts-flash"), model("mimo", "mimo-v2.5-tts"))).toBe(false);
+  });
+});
+
+describe("apiTestModels", () => {
+  it("keeps the API test selector aligned with real provider models", () => {
+    const providerModel = model("dashscope", "qwen3-tts-flash");
+    const demoModel = { ...model("demo", "local-demo"), mode: "demo" as const };
+
+    expect(apiTestModels([demoModel, providerModel])).toEqual([providerModel]);
   });
 });
 

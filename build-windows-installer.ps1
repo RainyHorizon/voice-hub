@@ -1,4 +1,4 @@
-﻿param(
+param(
   [string]$Version = "",
   [string]$PortableZip = "",
   [string]$IsccPath = ""
@@ -13,7 +13,7 @@ if ($Version -notmatch '^[0-9A-Za-z][0-9A-Za-z._-]*$') { throw "版本号格式�
 $releaseRoot = Join-Path $projectRoot "output\releases"
 $stageRoot = Join-Path $projectRoot "output\installer-stage"
 $archive = if ($PortableZip) { Get-Item -LiteralPath $PortableZip } else {
-  Get-Item -LiteralPath (Join-Path $releaseRoot "VoxNest-$Version-Windows-Portable.zip")
+  Get-Item -LiteralPath (Join-Path $releaseRoot "VoiceHub-$Version-Windows-Portable.zip")
 }
 $iscc = if ($IsccPath) { $IsccPath } else {
   $candidate = @(
@@ -29,18 +29,18 @@ New-Item -ItemType Directory -Force -Path $stageRoot | Out-Null
 $extractRoot = Join-Path $stageRoot "_extract"
 Expand-Archive -LiteralPath $archive.FullName -DestinationPath $extractRoot -Force
 $portableRoot = Get-ChildItem -LiteralPath $extractRoot -Directory | Select-Object -First 1
-if (-not $portableRoot -or -not (Test-Path (Join-Path $portableRoot.FullName "VoxNest.exe"))) {
-  throw "便携包中未找到 VoxNest.exe。"
+if (-not $portableRoot -or -not (Test-Path (Join-Path $portableRoot.FullName "VoiceHub.exe"))) {
+  throw "便携包中未找到 VoiceHub.exe。"
 }
 Get-ChildItem -LiteralPath $portableRoot.FullName -Force | Move-Item -Destination $stageRoot -Force
 Remove-Item -LiteralPath $extractRoot -Recurse -Force
 
-$iss = Join-Path $projectRoot "installer\VoxNest.iss"
+$iss = Join-Path $projectRoot "installer\VoiceHub.iss"
 & $iscc "/DVersion=$Version" "/DSourceDir=$stageRoot" $iss
 if ($LASTEXITCODE -ne 0) { throw "Inno Setup 编译失败。" }
-$setup = Join-Path $releaseRoot "VoxNest-$Version-Windows-Setup.exe"
+$setup = Join-Path $releaseRoot "VoiceHub-$Version-Windows-Setup.exe"
 if (-not (Test-Path -LiteralPath $setup)) { throw "未生成安装包：$setup" }
 $hash = Get-FileHash -LiteralPath $setup -Algorithm SHA256
 Set-Content -LiteralPath "$setup.sha256" -Value "$($hash.Hash)  $([IO.Path]::GetFileName($setup))" -Encoding Ascii
 Remove-Item -LiteralPath $stageRoot -Recurse -Force
-Write-Host "VoxNest 安装包已生成：$setup" -ForegroundColor Green
+Write-Host "Voice Hub 安装包已生成：$setup" -ForegroundColor Green

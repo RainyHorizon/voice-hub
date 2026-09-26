@@ -67,7 +67,7 @@ const StudioContext = createContext<StudioContextValue | null>(null);
 export function StudioProvider({ children }: { children: ReactNode }) {
   const [active, setActive] = useState("synthesize");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() =>
-    window.localStorage.getItem("voice-studio.sidebar-collapsed") === "true",
+    window.localStorage.getItem("voice-hub.sidebar-collapsed") === "true",
   );
   const [voices, setVoices] = useState<Voice[]>([]);
   const [models, setModels] = useState<Model[]>([]);
@@ -98,7 +98,7 @@ export function StudioProvider({ children }: { children: ReactNode }) {
   );
   useEffect(() => {
     window.localStorage.setItem(
-      "voice-studio.sidebar-collapsed",
+      "voice-hub.sidebar-collapsed",
       String(sidebarCollapsed),
     );
   }, [sidebarCollapsed]);
@@ -141,7 +141,7 @@ export function StudioProvider({ children }: { children: ReactNode }) {
         setUpdateUrl(updateResult.value.release_url);
         setUpdateAvailable(true);
         setUpdateInstallable(updateResult.value.can_install);
-        setNotice(`发现 VoxNest ${updateResult.value.latest_version}，可在 GitHub Release 页面下载安装包。`);
+        setNotice(`发现 Voice Hub ${updateResult.value.latest_version}，可在 GitHub Release 页面下载安装包。`);
       }
       if (failures.length) {
         setNotice(`部分数据加载失败：${failures.join("、")}。请确认后端已启动。`);
@@ -159,7 +159,7 @@ export function StudioProvider({ children }: { children: ReactNode }) {
           setUpdateUrl(result.release_url);
           setUpdateAvailable(true);
           setUpdateInstallable(result.can_install);
-          setNotice(`发现 VoxNest ${result.latest_version}，可在 GitHub Release 页面下载安装包。`);
+          setNotice(`发现 Voice Hub ${result.latest_version}，可在 GitHub Release 页面下载安装包。`);
         })
         .catch(() => undefined);
     }, 6 * 60 * 60 * 1000);
@@ -167,7 +167,7 @@ export function StudioProvider({ children }: { children: ReactNode }) {
   }, []);
   const installUpdate = async () => {
     if (!updateInstallable || updateInstalling) return;
-    if (!window.confirm("VoxNest 将下载更新、关闭当前程序并自动重启。是否继续？")) return;
+    if (!window.confirm("Voice Hub 将下载更新、关闭当前程序并自动重启。是否继续？")) return;
     setUpdateInstalling(true);
     setNotice("正在下载并校验更新，完成后将自动重启…");
     try {
@@ -280,7 +280,7 @@ export function StudioProvider({ children }: { children: ReactNode }) {
   const removeVoice = async (item: Voice) => {
     if (
       !window.confirm(
-        `从 VoxNest 移除“${item.display_name}”？\n\n这不会删除厂商控制台里的远端音色；本地参考音频（如有）也会一并删除。`,
+        `从 Voice Hub 移除“${item.display_name}”？\n\n这不会删除厂商控制台里的远端音色；本地参考音频（如有）也会一并删除。`,
       )
     )
       return;

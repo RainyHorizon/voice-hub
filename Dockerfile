@@ -8,16 +8,16 @@ COPY frontend/ ./
 RUN npm run build
 
 FROM python:3.12-slim AS runtime
-ARG VERSION=1.6.0
+ARG VERSION=1.7.0
 ARG REVISION=unknown
 ARG CREATED=unknown
 
-LABEL org.opencontainers.image.title="VoxNest" \
+LABEL org.opencontainers.image.title="Voice Hub" \
       org.opencontainers.image.description="Local multi-provider AI voice studio and OpenAI-compatible gateway" \
       org.opencontainers.image.version="$VERSION" \
       org.opencontainers.image.revision="$REVISION" \
       org.opencontainers.image.created="$CREATED" \
-      org.opencontainers.image.source="https://github.com/RainyHorizon/VoxNest"
+      org.opencontainers.image.source="https://github.com/RainyHorizon/voice-hub"
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \

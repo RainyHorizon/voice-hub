@@ -1,9 +1,9 @@
-#define MyAppName "VoxNest"
+#define MyAppName "Voice Hub"
 #define MyAppPublisher "RainyHorizon"
-#define MyAppURL "https://github.com/RainyHorizon/VoxNest"
+#define MyAppURL "https://github.com/RainyHorizon/voice-hub"
 
 #ifndef Version
-  #define Version "1.6.0"
+  #define Version "1.7.0"
 #endif
 #ifndef SourceDir
   #define SourceDir "..\output\installer-stage"
@@ -15,17 +15,17 @@ AppName={#MyAppName}
 AppVersion={#Version}
 AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
-DefaultDirName={localappdata}\VoxNest
-DefaultGroupName=VoxNest
+DefaultDirName={localappdata}\Voice Hub
+DefaultGroupName=Voice Hub
 PrivilegesRequired=lowest
 ArchitecturesInstallIn64BitMode=x64
 DisableProgramGroupPage=yes
 OutputDir=..\output\releases
-OutputBaseFilename=VoxNest-{#Version}-Windows-Setup
+OutputBaseFilename=VoiceHub-{#Version}-Windows-Setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
-UninstallDisplayName=VoxNest
+UninstallDisplayName=Voice Hub
 
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -34,15 +34,15 @@ Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs 
 Name: "{app}\data\audio"
 
 [INI]
-Filename: "{app}\voxnest-install.ini"; Section: "Install"; Key: "Type"; String: "setup"
+Filename: "{app}\voice-hub-install.ini"; Section: "Install"; Key: "Type"; String: "setup"
 
 [Icons]
-Name: "{userprograms}\VoxNest"; Filename: "{app}\VoxNest.exe"; WorkingDir: "{app}"
-Name: "{userdesktop}\VoxNest"; Filename: "{app}\VoxNest.exe"; WorkingDir: "{app}"
+Name: "{userprograms}\Voice Hub"; Filename: "{app}\VoiceHub.exe"; WorkingDir: "{app}"
+Name: "{userdesktop}\Voice Hub"; Filename: "{app}\VoiceHub.exe"; WorkingDir: "{app}"
 
 [Run]
-Filename: "{app}\VoxNest.exe"; Description: "启动 VoxNest"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\VoiceHub.exe"; Description: "启动 Voice Hub"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\frontend\dist"
-Type: files; Name: "{app}\voxnest-install.ini"
+Type: files; Name: "{app}\voice-hub-install.ini"

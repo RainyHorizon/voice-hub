@@ -13,6 +13,11 @@ export const providerMeta: Record<
 
 export const credentialProviderIds = ["dashscope", "volcengine", "minimax", "mimo"];
 
+export const apiTestModels = (models: Model[]) =>
+  models.filter(
+    (item) => item.mode !== "demo" && item.operations.includes("synthesis"),
+  );
+
 export const sample =
   "夜色落在城市边缘，远处的灯一盏一盏亮起来。把这段文字交给不同的声音，听见同一句话里的不同质感。";
 

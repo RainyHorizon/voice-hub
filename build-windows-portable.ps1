@@ -1,4 +1,4 @@
-﻿param(
+param(
   [string]$Version = "",
   [string]$FfmpegBinDirectory = ""
 )
@@ -38,7 +38,7 @@ if ($Version -notmatch '^[0-9A-Za-z][0-9A-Za-z._-]*$') {
   throw "版本号只能包含字母、数字、点、下划线和连字符。"
 }
 
-$packageName = "VoxNest-$Version-Windows-Portable"
+$packageName = "VoiceHub-$Version-Windows-Portable"
 $stagePath = Join-Path $buildRoot $packageName
 $pyinstallerDist = Join-Path $buildRoot "pyinstaller-dist"
 $pyinstallerWork = Join-Path $buildRoot "pyinstaller-work"
@@ -94,12 +94,12 @@ foreach ($path in @($stagePath, $pyinstallerDist, $pyinstallerWork)) {
   if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Recurse -Force }
 }
 
-Write-Host "正在生成 VoxNest.exe..." -ForegroundColor Cyan
+Write-Host "正在生成 VoiceHub.exe..." -ForegroundColor Cyan
 & $pythonExecutable -m PyInstaller `
   --noconfirm `
   --clean `
   --onedir `
-  --name VoxNest `
+  --name VoiceHub `
   --paths $backendRoot `
   --collect-all keyring `
   --collect-all dashscope `
@@ -111,9 +111,9 @@ Write-Host "正在生成 VoxNest.exe..." -ForegroundColor Cyan
   (Join-Path $backendRoot "portable_main.py")
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller 构建失败。" }
 
-$builtApplication = Join-Path $pyinstallerDist "VoxNest"
-if (-not (Test-Path -LiteralPath (Join-Path $builtApplication "VoxNest.exe") -PathType Leaf)) {
-  throw "PyInstaller 未生成 VoxNest.exe。"
+$builtApplication = Join-Path $pyinstallerDist "VoiceHub"
+if (-not (Test-Path -LiteralPath (Join-Path $builtApplication "VoiceHub.exe") -PathType Leaf)) {
+  throw "PyInstaller 未生成 VoiceHub.exe。"
 }
 Move-Item -LiteralPath $builtApplication -Destination $stagePath
 
@@ -124,14 +124,15 @@ New-Item -ItemType File -Force -Path (Join-Path $stagePath "data\audio\.gitkeep"
 New-Item -ItemType Directory -Force -Path (Join-Path $stagePath "tools") | Out-Null
 Copy-Item -LiteralPath $ffmpeg -Destination (Join-Path $stagePath "tools\ffmpeg.exe")
 Copy-Item -LiteralPath $ffprobe -Destination (Join-Path $stagePath "tools\ffprobe.exe")
-Copy-Item -LiteralPath (Join-Path $projectRoot "portable\启动 VoxNest.bat") -Destination (Join-Path $stagePath "启动 VoxNest.bat")
-Copy-Item -LiteralPath (Join-Path $projectRoot "portable\停止 VoxNest.bat") -Destination (Join-Path $stagePath "停止 VoxNest.bat")
-Copy-Item -LiteralPath (Join-Path $projectRoot "更新 VoxNest.bat") -Destination (Join-Path $stagePath "更新 VoxNest.bat")
+Copy-Item -LiteralPath (Join-Path $projectRoot "portable\启动 Voice Hub.bat") -Destination (Join-Path $stagePath "启动 Voice Hub.bat")
+Copy-Item -LiteralPath (Join-Path $projectRoot "portable\停止 Voice Hub.bat") -Destination (Join-Path $stagePath "停止 Voice Hub.bat")
+Copy-Item -LiteralPath (Join-Path $projectRoot "更新 Voice Hub.bat") -Destination (Join-Path $stagePath "更新 Voice Hub.bat")
 Copy-Item -LiteralPath (Join-Path $projectRoot "stop.ps1") -Destination (Join-Path $stagePath "stop.ps1")
 Copy-Item -LiteralPath (Join-Path $projectRoot "update.ps1") -Destination (Join-Path $stagePath "update.ps1")
 Copy-Item -LiteralPath (Join-Path $projectRoot "installer-update.ps1") -Destination (Join-Path $stagePath "installer-update.ps1")
 Copy-Item -LiteralPath (Join-Path $projectRoot "PORTABLE_README.md") -Destination (Join-Path $stagePath "便携版说明.md")
 Copy-Item -LiteralPath (Join-Path $projectRoot "README.md") -Destination (Join-Path $stagePath "README.md")
+Copy-Item -LiteralPath (Join-Path $projectRoot "CHANGELOG.md") -Destination (Join-Path $stagePath "CHANGELOG.md")
 Copy-Item -LiteralPath (Join-Path $projectRoot "LICENSE") -Destination (Join-Path $stagePath "LICENSE")
 Copy-Item -LiteralPath (Join-Path $projectRoot "THIRD_PARTY_NOTICES.md") -Destination (Join-Path $stagePath "THIRD_PARTY_NOTICES.md")
 New-Item -ItemType Directory -Force -Path (Join-Path $stagePath "third_party\ffmpeg") | Out-Null
@@ -161,7 +162,7 @@ if ($forbiddenFiles) {
 }
 
 Write-Host "正在检查便携版..." -ForegroundColor Cyan
-& (Join-Path $stagePath "VoxNest.exe") --check --no-browser
+& (Join-Path $stagePath "VoiceHub.exe") --check --no-browser
 if ($LASTEXITCODE -ne 0) { throw "便携版运行检查失败。" }
 
 if (Test-Path -LiteralPath $archivePath) { Remove-Item -LiteralPath $archivePath -Force }

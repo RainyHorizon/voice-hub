@@ -13,7 +13,7 @@ from . import config
 from .credentials import environment_credentials_enabled, environment_provider_credentials
 from .storage import init_storage_schema
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 def now() -> str:
@@ -98,6 +98,8 @@ def init_db() -> None:
               first_chunk_latency_ms INTEGER, total_latency_ms INTEGER, chunk_count INTEGER NOT NULL DEFAULT 0,
               audio_bytes INTEGER NOT NULL DEFAULT 0, input_chars INTEGER NOT NULL DEFAULT 0,
               response_format TEXT, native_streaming INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS gateway_model_aliases (
+              alias TEXT PRIMARY KEY, model_id TEXT NOT NULL, updated_at TEXT NOT NULL);
             CREATE INDEX IF NOT EXISTS idx_gateway_requests_created_at ON gateway_requests(created_at);
             CREATE INDEX IF NOT EXISTS idx_gateway_requests_provider_model ON gateway_requests(provider, model);
             CREATE INDEX IF NOT EXISTS idx_jobs_created_at ON jobs(created_at);
@@ -276,6 +278,15 @@ def init_db() -> None:
             "UPDATE voices SET status='legacy' WHERE provider='minimax' AND status='active' AND (model_id='speech-demo' OR provider_voice_id LIKE 'reference_%')"
         )
         connection.execute("UPDATE voices SET status='legacy' WHERE id='voice_minimax_presenter-male' AND status!='legacy'")
+        aliases = {
+            "tts-default": "mimo/mimo-v2.5-tts",
+            "tts-fast": "dashscope/qwen3-tts-flash",
+            "tts-hq": "mimo/mimo-v2.5-tts",
+        }
+        connection.executemany(
+            "INSERT OR IGNORE INTO gateway_model_aliases (alias, model_id, updated_at) VALUES (?, ?, ?)",
+            [(alias, model_id, now()) for alias, model_id in aliases.items()],
+        )
         minimax_voices = [
             ("male-qn-qingse", "青涩青年音色", "qingse"),
             ("female-shaonv", "少女音色", "shaonv"),
@@ -319,6 +330,8 @@ def init_db() -> None:
                ON voices(public_name) WHERE status='active'"""
         )
         sync_environment_accounts(connection)
+        if current_version != SCHEMA_VERSION:
+            connection.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
         if connection.execute("SELECT COUNT(*) FROM gateway_clients").fetchone()[0] == 0:
             from .gateway_auth import gateway_key
             key = gateway_key()

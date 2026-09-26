@@ -36,8 +36,13 @@ def available_models():
 
 
 def resolve_model(model_id: str):
-    aliases = {"tts-default": "mimo/mimo-v2.5-tts", "tts-fast": "dashscope/qwen3-tts-flash", "tts-hq": "mimo/mimo-v2.5-tts"}
-    target = aliases.get(model_id, model_id)
+    target = model_id
+    if model_id in {"tts-default", "tts-fast", "tts-hq"}:
+        with db() as connection:
+            row = connection.execute(
+                "SELECT model_id FROM gateway_model_aliases WHERE alias=?", (model_id,)
+            ).fetchone()
+        target = row["model_id"] if row else model_id
     for model in available_models():
         if model.gateway_id == target:
             return model

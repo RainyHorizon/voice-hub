@@ -1,4 +1,4 @@
-name: Publish Docker Image
+name: Publish Voice Hub Docker Image
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Image version, for example 1.3.0"
+        description: "Voice Hub image version, for example 1.7.0"
         required: true
         type: string
 
@@ -16,6 +16,7 @@ permissions:
 
 jobs:
   publish:
+    name: Publish multi-platform GHCR image
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

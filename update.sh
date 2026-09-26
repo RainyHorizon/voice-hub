@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-REPOSITORY="RainyHorizon/VoxNest"
+REPOSITORY="RainyHorizon/voice-hub"
 MANIFEST_NAME=".voice-studio-files.txt"
 
 # Run from a temporary copy so a release update can safely replace update.sh.
@@ -21,7 +21,7 @@ CHECK_ONLY=0
 ASSUME_YES=0
 UPDATE_TEMP_ROOT=""
 
-log() { printf '[VoxNest] %s\n' "$1"; }
+log() { printf '[Voice Hub] %s\n' "$1"; }
 fail() { printf '\n更新失败：%s\n更新器不会主动删除 data 目录。\n' "$1" >&2; exit 1; }
 
 cleanup() {
@@ -69,7 +69,7 @@ voice_studio_is_running() {
 
 require_stopped() {
   if voice_studio_is_running; then
-    fail "VoxNest 仍在运行。请先关闭启动终端，再重新执行更新。"
+    fail "Voice Hub 仍在运行。请先关闭启动终端，再重新执行更新。"
   fi
 }
 
@@ -88,8 +88,8 @@ update_git_checkout() {
   local remote_url branch upstream counts ahead behind changes commit
   remote_url="$(git -C "$INSTALL_DIR" remote get-url origin 2>/dev/null)" || fail "无法读取 Git origin。"
   case "$remote_url" in
-    https://github.com/RainyHorizon/VoxNest|https://github.com/RainyHorizon/VoxNest.git|git@github.com:RainyHorizon/VoxNest|git@github.com:RainyHorizon/VoxNest.git|ssh://git@github.com/RainyHorizon/VoxNest|ssh://git@github.com/RainyHorizon/VoxNest.git) ;;
-    *) fail "origin 不是 VoxNest 官方仓库，更新器不会自动拉取：$remote_url" ;;
+    https://github.com/RainyHorizon/voice-hub|https://github.com/RainyHorizon/voice-hub.git|git@github.com:RainyHorizon/voice-hub|git@github.com:RainyHorizon/voice-hub.git|ssh://git@github.com/RainyHorizon/voice-hub|ssh://git@github.com/RainyHorizon/voice-hub.git) ;;
+    *) fail "origin 不是 Voice Hub 官方仓库，更新器不会自动拉取：$remote_url" ;;
   esac
 
   branch="$(git -C "$INSTALL_DIR" branch --show-current)"
@@ -148,7 +148,7 @@ update_release_package() {
   curl --fail --silent --show-error --location --retry 2 \
     -H 'Accept: application/vnd.github+json' \
     -H 'X-GitHub-Api-Version: 2022-11-28' \
-    -H 'User-Agent: VoxNest-Updater' \
+    -H 'User-Agent: VoiceHub-Updater' \
     "https://api.github.com/repos/$REPOSITORY/releases/latest" > "$metadata_file" \
     || fail "无法访问 GitHub Releases。"
 
@@ -165,7 +165,7 @@ if release.get("draft") or release.get("prerelease"):
 version = str(release.get("tag_name", "")).strip().lstrip("v")
 if not re.fullmatch(r"\d+\.\d+\.\d+", version):
     raise SystemExit("无法识别最新版本号")
-archive_name = f"VoxNest-{version}-{platform}.tar.gz"
+archive_name = f"VoiceHub-{version}-{platform}.tar.gz"
 checksum_name = f"{archive_name}.sha256"
 assets = {asset.get("name"): asset.get("browser_download_url") for asset in release.get("assets", [])}
 archive_url = assets.get(archive_name)
@@ -339,7 +339,7 @@ except Exception:
             shutil.copy2(backup, destination)
     raise
 PY
-  printf 'VoxNest 已更新到 %s。\n' "$latest_version"
+  printf 'Voice Hub 已更新到 %s。\n' "$latest_version"
   printf '本地 data、系统凭据、虚拟环境和非程序文件均已保留。\n'
   printf '下次启动时会自动检查 Python 依赖。\n'
 }
@@ -349,6 +349,6 @@ if [[ -d "$INSTALL_DIR/.git" && -f "$INSTALL_DIR/start.sh" ]]; then
 elif [[ -f "$INSTALL_DIR/start.sh" && -d "$INSTALL_DIR/backend/app" ]]; then
   update_release_package
 else
-  fail "无法识别当前安装类型。请确认 update.sh 位于 VoxNest 的程序根目录。"
+  fail "无法识别当前安装类型。请确认 update.sh 位于 Voice Hub 的程序根目录。"
 fi
 

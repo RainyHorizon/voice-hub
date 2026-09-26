@@ -23,7 +23,7 @@ from ..database import db
 
 router = APIRouter(tags=["system"])
 
-GITHUB_REPOSITORY = "RainyHorizon/VoxNest"
+GITHUB_REPOSITORY = "RainyHorizon/voice-hub"
 _update_task: asyncio.Task | None = None
 _update_state: dict[str, Any] = {"status": "idle", "message": ""}
 
@@ -39,12 +39,12 @@ def check_for_update() -> dict[str, Any]:
         "release_url": f"https://github.com/{GITHUB_REPOSITORY}/releases",
         "setup_asset_url": None,
         "checksum_asset_url": None,
-        "can_install": bool(platform.system() == "Windows" and getattr(sys, "frozen", False) and (config.ROOT / "voxnest-install.ini").is_file()),
+        "can_install": bool(platform.system() == "Windows" and getattr(sys, "frozen", False) and (config.ROOT / "voice-hub-install.ini").is_file()),
         "error": None,
     }
     request = urllib.request.Request(
         f"https://api.github.com/repos/{GITHUB_REPOSITORY}/releases/latest",
-        headers={"Accept": "application/vnd.github+json", "User-Agent": "VoxNest-Updater"},
+        headers={"Accept": "application/vnd.github+json", "User-Agent": "VoiceHub-Updater"},
     )
     try:
         with urllib.request.urlopen(request, timeout=3) as response:
@@ -56,9 +56,9 @@ def check_for_update() -> dict[str, Any]:
         result["available"] = bool(re.fullmatch(r"\d+\.\d+\.\d+", current) and tuple(map(int, tag.split("."))) > tuple(map(int, current.split("."))))
         result["release_url"] = payload.get("html_url") or result["release_url"]
         for asset in payload.get("assets") or []:
-            if asset.get("name") == f"VoxNest-{tag}-Windows-Setup.exe":
+            if asset.get("name") == f"VoiceHub-{tag}-Windows-Setup.exe":
                 result["setup_asset_url"] = asset.get("browser_download_url")
-            elif asset.get("name") == f"VoxNest-{tag}-Windows-Setup.exe.sha256":
+            elif asset.get("name") == f"VoiceHub-{tag}-Windows-Setup.exe.sha256":
                 result["checksum_asset_url"] = asset.get("browser_download_url")
     except (OSError, urllib.error.URLError, ValueError, json.JSONDecodeError) as exc:
         result["error"] = str(exc)
@@ -76,7 +76,7 @@ async def _watch_installer(ready_file: Path, process: subprocess.Popen, shutdown
             if ready_file.is_file():
                 state = ready_file.read_text(encoding="utf-8-sig").strip()
                 if state == "ready":
-                    _update_state.update(status="restarting", message="下载校验完成，正在安装并重启 VoxNest…")
+                    _update_state.update(status="restarting", message="下载校验完成，正在安装并重启 Voice Hub…")
                     await asyncio.sleep(2)
                     shutdown()
                     return
@@ -106,7 +106,7 @@ async def install_update(request: Request):
     helper = config.ROOT / "installer-update.ps1"
     if not helper.is_file():
         raise HTTPException(409, "缺少独立更新器，请手动安装一次新版 Setup")
-    temporary = Path(tempfile.mkdtemp(prefix="VoxNest-Update-"))
+    temporary = Path(tempfile.mkdtemp(prefix="VoiceHub-Update-"))
     helper_copy = temporary / "installer-update.ps1"
     shutil.copy2(helper, helper_copy)
     ready = temporary / "status.txt"
@@ -177,7 +177,7 @@ def system_diagnostics() -> dict[str, Any]:
     })
     try:
         config.DATA.mkdir(parents=True, exist_ok=True)
-        with tempfile.NamedTemporaryFile(prefix="voice-studio-", dir=config.DATA):
+        with tempfile.NamedTemporaryFile(prefix="voice-hub-", dir=config.DATA):
             pass
         data_check = {"id": "data", "label": "数据目录", "status": "ok", "version": "可写", "detail": str(config.DATA)}
     except OSError as exc:
@@ -201,7 +201,7 @@ def summary():
         voices = connection.execute("SELECT COUNT(*) FROM voices WHERE status='active'").fetchone()[0]
         jobs = connection.execute("SELECT COUNT(*) FROM jobs").fetchone()[0]
         successful = connection.execute("SELECT COUNT(*) FROM jobs WHERE status='completed'").fetchone()[0]
-    return {"application": "voice-studio", "version": config.APP_VERSION, "voices": voices, "jobs": jobs, "successful_jobs": successful, "gateway": {"enabled": True, "base_url": "/v1"}}
+    return {"application": "voice-hub", "version": config.APP_VERSION, "voices": voices, "jobs": jobs, "successful_jobs": successful, "gateway": {"enabled": True, "base_url": "/v1"}}
 
 
 @router.get("/api/system/diagnostics")

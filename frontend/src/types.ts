@@ -146,6 +146,17 @@ export type Gateway = {
   key_source?: string;
   managed?: boolean;
 };
+export type GatewayAlias = {
+  alias: "tts-default" | "tts-fast" | "tts-hq";
+  model_id: string;
+  updated_at: string;
+  valid: boolean;
+  model: {
+    id: string;
+    owned_by: string;
+    voice_studio?: { operations?: string[] };
+  } | null;
+};
 export type LatencyStats = { p50: number | null; p95: number | null; samples: number };
 export type GatewayStatsBucket = {
   name: string;

@@ -152,7 +152,7 @@ async def list_cloud_voices(provider: str, provider_account_id: str | None = Non
                 "provider_account_id": account["id"],
                 "provider_project_name": project_name or "" if provider == "volcengine" else "",
                 "compatible": compatible,
-                "compatibility_message": "" if compatible else "VoxNest 尚未接入这个音色绑定的模型",
+                "compatibility_message": "" if compatible else "Voice Hub 尚未接入这个音色绑定的模型",
                 "imported": voice_already_imported(
                     provider,
                     model_id,
@@ -380,7 +380,7 @@ def remove_voice(voice_id: str):
             asset.unlink(missing_ok=True)
         except ValueError:
             pass
-    return {"deleted": True, "id": voice_id, "message": "已从 VoxNest 音色库移除；厂商云端音色未删除。"}
+    return {"deleted": True, "id": voice_id, "message": "已从 Voice Hub 音色库移除；厂商云端音色未删除。"}
 
 
 @router.patch("/api/voices/{voice_id}")

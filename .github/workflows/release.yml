@@ -1,4 +1,4 @@
-name: Build Release Assets
+name: Build Voice Hub Release Assets
 
 on:
   push:
@@ -77,12 +77,12 @@ jobs:
         with:
           name: windows-package
           path: |
-            output/releases/VoxNest-*-Windows.zip
-            output/releases/VoxNest-*-Windows.zip.sha256
-            output/releases/VoxNest-*-Windows-Portable.zip
-            output/releases/VoxNest-*-Windows-Portable.zip.sha256
-            output/releases/VoxNest-*-Windows-Setup.exe
-            output/releases/VoxNest-*-Windows-Setup.exe.sha256
+            output/releases/VoiceHub-*-Windows.zip
+            output/releases/VoiceHub-*-Windows.zip.sha256
+            output/releases/VoiceHub-*-Windows-Portable.zip
+            output/releases/VoiceHub-*-Windows-Portable.zip.sha256
+            output/releases/VoiceHub-*-Windows-Setup.exe
+            output/releases/VoiceHub-*-Windows-Setup.exe.sha256
 
   unix:
     name: ${{ matrix.os }} source package
@@ -121,12 +121,12 @@ jobs:
           PLATFORM_LABEL: ${{ matrix.label }}
         run: |
           version="${RELEASE_VERSION#v}"
-          package="VoxNest-${version}-${PLATFORM_LABEL}"
+          package="VoiceHub-${version}-${PLATFORM_LABEL}"
           mkdir -p "dist/${package}/frontend" "dist/${package}/backend" "dist/${package}/data/audio"
           cp -R backend/app "dist/${package}/backend/"
           cp backend/requirements.txt "dist/${package}/backend/"
           cp -R frontend/dist "dist/${package}/frontend/"
-          cp start.sh update.sh README.md LICENSE .gitattributes "dist/${package}/"
+          cp start.sh update.sh README.md CHANGELOG.md LICENSE .gitattributes "dist/${package}/"
           chmod +x "dist/${package}/start.sh" "dist/${package}/update.sh"
           printf '%s\n' "$version" > "dist/${package}/VERSION"
           find "dist/${package}" -type f \
@@ -152,11 +152,24 @@ jobs:
     runs-on: ubuntu-latest
     needs: [windows, unix]
     steps:
+      - name: Checkout release notes
+        uses: actions/checkout@v4
       - name: Download all packages
         uses: actions/download-artifact@v4
         with:
           path: release-assets
           merge-multiple: true
+      - name: Extract release notes
+        env:
+          RELEASE_VERSION: ${{ github.ref_name }}
+        run: |
+          version="${RELEASE_VERSION#v}"
+          awk -v heading="## ${version} - " '
+            index($0, heading) == 1 { found = 1 }
+            found && /^## / && index($0, heading) != 1 { exit }
+            found { print }
+          ' CHANGELOG.md > release-notes.md
+          test -s release-notes.md
       - name: Create release and upload assets
         env:
           GH_TOKEN: ${{ github.token }}
@@ -165,4 +178,4 @@ jobs:
           tag="${RELEASE_VERSION}"
           if [[ "${tag}" != v* ]]; then tag="v${tag}"; fi
           gh release create "$tag" release-assets/* --repo "${GITHUB_REPOSITORY}" \
-            --title "VoxNest ${tag}" --generate-notes --verify-tag
+            --title "Voice Hub ${tag}" --notes-file release-notes.md --verify-tag

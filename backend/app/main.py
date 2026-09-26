@@ -1,4 +1,4 @@
-"""VoxNest FastAPI application factory and process lifecycle.
+"""Voice Hub FastAPI application factory and process lifecycle.
 
 Route handlers live in ``app.routers.*``; this module wires them into the app,
 owns middleware, exception handlers, startup/shutdown tasks and SPA hosting.
@@ -165,7 +165,7 @@ async def lifespan(app: FastAPI):
             await task
 
 
-app = FastAPI(title="VoxNest Gateway", version=config.APP_VERSION, lifespan=lifespan)
+app = FastAPI(title="Voice Hub Gateway", version=config.APP_VERSION, lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=sorted(config.LOCAL_BROWSER_ORIGINS), allow_methods=["*"], allow_headers=["*"])
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=config.TRUSTED_HOSTS)
 app.middleware("http")(reject_untrusted_browser_origin)

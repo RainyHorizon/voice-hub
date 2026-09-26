@@ -1,4 +1,4 @@
-﻿param(
+param(
   [ValidateRange(1, 65535)]
   [int]$Port = 0,
   [switch]$PauseOnExit
@@ -9,7 +9,7 @@ $ports = if ($Port -gt 0) { @($Port) } else { 8765..8790 }
 $targets = @{}
 
 function Write-Step([string]$Message, [ConsoleColor]$Color = [ConsoleColor]::Cyan) {
-  Write-Host "[VoxNest] $Message" -ForegroundColor $Color
+  Write-Host "[Voice Hub] $Message" -ForegroundColor $Color
 }
 
 try {
@@ -21,16 +21,16 @@ try {
       } catch {
         continue
       }
-      if ($summary.application -ne "voice-studio") {
+      if ($summary.application -ne "voice-hub") {
         continue
       }
 
       $process = Get-CimInstance Win32_Process -Filter "ProcessId=$($listener.OwningProcess)" -ErrorAction SilentlyContinue
       $commandLine = [string]$process.CommandLine
       $executablePath = [string]$process.ExecutablePath
-      $isVoxNest = $commandLine -match '(?i)voice-studio|portable_main\.py|app\.main:app' -or
-        $executablePath -match '(?i)VoxNest\.exe'
-      if ($isVoxNest) {
+      $isVoiceHub = $commandLine -match '(?i)voice-studio|portable_main\.py|app\.main:app' -or
+        $executablePath -match '(?i)VoiceHub\.exe'
+      if ($isVoiceHub) {
         $targets[([int]$listener.OwningProcess)] = [pscustomobject]@{
           Port = $candidate
           ProcessId = [int]$listener.OwningProcess
@@ -41,19 +41,19 @@ try {
   }
 
   if ($targets.Count -eq 0) {
-    Write-Step "VoxNest is not running." Yellow
+    Write-Step "Voice Hub is not running." Yellow
     exit 0
   }
 
   foreach ($target in $targets.Values) {
-    Write-Step "Stopping VoxNest on port $($target.Port) (PID $($target.ProcessId))..."
+    Write-Step "Stopping Voice Hub on port $($target.Port) (PID $($target.ProcessId))..."
     Stop-Process -Id $target.ProcessId -Force -ErrorAction Stop
   }
   Start-Sleep -Milliseconds 500
-  Write-Step "VoxNest stopped." Green
+  Write-Step "Voice Hub stopped." Green
 } catch {
   Write-Host ""
-  Write-Step "Could not stop VoxNest: $($_.Exception.Message)" Red
+  Write-Step "Could not stop Voice Hub: $($_.Exception.Message)" Red
   exit 1
 } finally {
   if ($PauseOnExit) {

@@ -24,8 +24,8 @@ import { pcmChunksToWavBlob, type PcmInfo } from "../audio";
 import { WorkspaceHero } from "../components/WorkspaceHero";
 import { handleTabListKeyDown } from "../components/tabs";
 import { useStudio } from "../context/StudioContext";
-import type { GatewayStats } from "../types";
-import { credentialProviderIds, providerMeta, voiceMatchesModel } from "../utils";
+import type { GatewayAlias, GatewayStats } from "../types";
+import { apiTestModels, credentialProviderIds, providerMeta, voiceMatchesModel } from "../utils";
 
 type GatewayTestResult = {
   status: "idle" | "running" | "success" | "error" | "cancelled";
@@ -49,7 +49,7 @@ export function GatewayPage() {
   const [rotating, setRotating] = useState(false);
   const [testModel, setTestModel] = useState("");
   const [testVoice, setTestVoice] = useState("");
-  const [testText, setTestText] = useState("你好，这是一段 VoxNest 网关测试语音。 ");
+  const [testText, setTestText] = useState("你好，这是一段 Voice Hub 网关测试语音。 ");
   const [testFormat, setTestFormat] = useState("mp3");
   const [catalogTest, setCatalogTest] = useState<GatewayTestResult>({ status: "idle" });
   const [speechTest, setSpeechTest] = useState<GatewayTestResult>({ status: "idle" });
@@ -64,14 +64,43 @@ export function GatewayPage() {
   const [statsLoading, setStatsLoading] = useState(false);
   const [gatewayView, setGatewayView] = useState<"docs" | "test" | "stats">("docs");
   const [openEndpoint, setOpenEndpoint] = useState("");
+  const [aliases, setAliases] = useState<GatewayAlias[]>([]);
+  const [aliasSelections, setAliasSelections] = useState<Record<string, string>>({});
+  const [aliasSaving, setAliasSaving] = useState(false);
+  const [aliasSavingName, setAliasSavingName] = useState("");
+  const [aliasMessage, setAliasMessage] = useState("");
+  const [aliasLoading, setAliasLoading] = useState(true);
   useEffect(() => setCurrent(gateway), [gateway]);
+  const refreshAliases = async () => {
+    const result = await api<{ aliases: GatewayAlias[] }>("/api/gateway/aliases");
+    setAliases(result.aliases);
+    setAliasSelections(Object.fromEntries(result.aliases.map((item) => [item.alias, item.model_id])));
+  };
+  useEffect(() => {
+    setAliasLoading(true);
+    refreshAliases().catch((error) => setAliasMessage(error instanceof Error ? `模型别名加载失败：${error.message}` : "模型别名加载失败")).finally(() => setAliasLoading(false));
+  }, []);
   const activeGateway = current || gateway;
   const base = activeGateway?.base_url || "http://127.0.0.1:8765/v1";
   const key = activeGateway?.key || "";
   const synthesisModels = models.filter((item) => item.operations.includes("synthesis"));
-  const selectedTestModel = synthesisModels.find((item) => item.gateway_id === testModel);
+  const testableModels = apiTestModels(models);
+  const selectedTestModel = testableModels.find((item) => item.gateway_id === testModel);
   const compatibleVoices = voices.filter((item) => voiceMatchesModel(item, selectedTestModel));
+  const selectedTestVoice = compatibleVoices.find((item) => item.public_name === testVoice);
+  const demoModel = synthesisModels.find((item) => item.mode === "demo");
+  const demoVoice = voices.find((item) => voiceMatchesModel(item, demoModel));
   const streamFormat = selectedTestModel?.provider === "mimo" ? "pcm" : "mp3";
+  const aliasMeta: Record<string, { label: string; description: string; tone: string }> = {
+    "tts-default": { label: "通用默认", description: "日常使用的平衡选择", tone: "default" },
+    "tts-fast": { label: "低延迟", description: "优先响应速度", tone: "fast" },
+    "tts-hq": { label: "高质量", description: "优先声音细节", tone: "hq" },
+  };
+  const modelGroups = testableModels.reduce<Record<string, typeof testableModels>>((groups, model) => {
+    const provider = providerMeta[model.provider]?.label || model.provider;
+    (groups[provider] ||= []).push(model);
+    return groups;
+  }, {});
 
   const refreshStats = async () => {
     setStatsLoading(true);
@@ -85,11 +114,13 @@ export function GatewayPage() {
   };
 
   useEffect(() => {
-    if (!testModel && synthesisModels[0]) setTestModel(synthesisModels[0].gateway_id);
-  }, [testModel, synthesisModels]);
+    if (!testableModels.some((item) => item.gateway_id === testModel)) {
+      setTestModel(testableModels[0]?.gateway_id || "");
+    }
+  }, [testModel, testableModels]);
   useEffect(() => {
     if (!compatibleVoices.some((item) => item.public_name === testVoice)) {
-      setTestVoice(compatibleVoices[0]?.public_name || "alloy");
+      setTestVoice(compatibleVoices[0]?.public_name || "");
     }
   }, [compatibleVoices, testVoice]);
   useEffect(() => () => {
@@ -132,9 +163,37 @@ export function GatewayPage() {
       setRotating(false);
     }
   };
+  const saveAlias = async (alias: GatewayAlias) => {
+    const modelId = aliasSelections[alias.alias] || alias.model_id;
+    if (!modelId || modelId === alias.model_id) return;
+    setAliasSaving(true);
+    setAliasSavingName(alias.alias);
+    try {
+      const result = await api<{ aliases: GatewayAlias[] }>(`/api/gateway/aliases/${alias.alias}`, {
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model_id: modelId }),
+      });
+      setAliases(result.aliases);
+      setAliasSelections(Object.fromEntries(result.aliases.map((item) => [item.alias, item.model_id])));
+      setAliasMessage(`${alias.alias} 已保存`);
+    } catch (error) { setAliasMessage(error instanceof Error ? error.message : "保存失败"); }
+    finally { setAliasSaving(false); setAliasSavingName(""); }
+  };
+  const resetAliases = async () => {
+    if (!window.confirm("确定恢复三个模型别名的默认指向吗？")) return;
+    const result = await api<{ aliases: GatewayAlias[] }>("/api/gateway/aliases/reset", { method: "POST" });
+    setAliases(result.aliases);
+    setAliasSelections(Object.fromEntries(result.aliases.map((item) => [item.alias, item.model_id])));
+    setAliasMessage("已恢复默认配置");
+  };
+  const selectTestModel = (modelId: string) => {
+    const nextModel = testableModels.find((item) => item.gateway_id === modelId);
+    const nextVoice = voices.find((item) => voiceMatchesModel(item, nextModel));
+    setTestModel(modelId);
+    setTestVoice(nextVoice?.public_name || "");
+  };
   const payload = {
-    model: testModel || "tts-default",
-    voice: testVoice || "alloy",
+    model: testModel,
+    voice: testVoice,
     input: testText,
     response_format: testFormat,
   };
@@ -143,7 +202,13 @@ export function GatewayPage() {
     "$body = @" + "{ model = \"" + payload.model + "\"; voice = \"" + payload.voice + "\"; input = " + JSON.stringify(payload.input) + "; response_format = \"" + payload.response_format + "\" } | ConvertTo-Json",
     `Invoke-WebRequest "${endpoint("audio/speech")}" -Headers $headers -Method Post -ContentType "application/json" -Body $body -OutFile voice.${testFormat}`,
   ].join("\n");
-  const curl = `curl "${endpoint("audio/speech")}" -H "Authorization: Bearer ${key}" -H "Content-Type: application/json" -d '${JSON.stringify(payload)}' --output voice.${testFormat}`;
+  const curl = [
+    `curl "${endpoint("audio/speech")}" \u0060`,
+    `  -H "Authorization: Bearer ${key}" \u0060`,
+    `  -H "Content-Type: application/json" \u0060`,
+    `  -d '${JSON.stringify(payload)}' \u0060`,
+    `  --output voice.${testFormat}`,
+  ].join("\n");
   const python = `from pathlib import Path\nfrom openai import OpenAI\n\nclient = OpenAI(api_key=${JSON.stringify(key)}, base_url=${JSON.stringify(base)})\nwith client.audio.speech.with_streaming_response.create(\n    model=${JSON.stringify(payload.model)},\n    voice=${JSON.stringify(payload.voice)},\n    input=${JSON.stringify(payload.input)},\n    response_format=${JSON.stringify(payload.response_format)},\n) as response:\n    response.stream_to_file(Path("voice.${testFormat}"))`;
   const javascript = `import OpenAI from "openai";\nimport { writeFile } from "node:fs/promises";\n\nconst client = new OpenAI({ apiKey: ${JSON.stringify(key)}, baseURL: ${JSON.stringify(base)} });\nconst audio = await client.audio.speech.create(${JSON.stringify(payload, null, 2)});\nawait writeFile("voice.${testFormat}", Buffer.from(await audio.arrayBuffer()));`;
   const stream = `# SSE 流式网关（每个 audio 事件是一段 Base64 音频）\ncurl.exe -N "${endpoint("audio/speech/stream")}" -H "Authorization: Bearer ${key}" -H "Content-Type: application/json" -d '${JSON.stringify({ ...payload, chunk_size: 4096 })}'`;
@@ -162,10 +227,9 @@ export function GatewayPage() {
     }
   };
 
-  const testSpeech = async () => {
+  const runSpeechTest = async (requestPayload: typeof payload, successMessage: string) => {
     if (!key) return setSpeechTest({ status: "error", message: "尚未读取网关 Key" });
     if (!testText.trim()) return setSpeechTest({ status: "error", message: "请输入测试文本" });
-    if (!compatibleVoices.length) return setSpeechTest({ status: "error", message: "当前模型没有兼容音色，请先在音色库导入或克隆音色" });
     setStreamTest({ status: "idle" });
     setSpeechTest({ status: "running" });
     const started = performance.now();
@@ -173,7 +237,7 @@ export function GatewayPage() {
       const response = await fetch(endpoint("audio/speech"), {
         method: "POST",
         headers: { Authorization: "Bearer " + key, "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(requestPayload),
       });
       if (!response.ok) throw new Error(await responseError(response));
       const blob = await response.blob();
@@ -187,12 +251,26 @@ export function GatewayPage() {
         contentType: response.headers.get("content-type") || blob.type,
         size: blob.size,
         jobId: response.headers.get("x-voice-studio-job") || undefined,
-        message: "音频已返回",
+        message: successMessage,
       });
       refreshStats().catch(() => undefined);
     } catch (error) {
       setSpeechTest({ status: "error", latency: Math.round(performance.now() - started), message: error instanceof Error ? error.message : "语音测试失败" });
     }
+  };
+
+  const testSpeech = async () => {
+    if (!compatibleVoices.length) return setSpeechTest({ status: "error", message: "当前模型没有兼容音色，请先在音色库导入或克隆音色" });
+    await runSpeechTest(payload, "厂商音频已返回");
+  };
+
+  const testOfflineDemo = async () => {
+    if (!demoModel || !demoVoice) return setSpeechTest({ status: "error", message: "本地演示模型或音色不可用" });
+    await runSpeechTest({
+      ...payload,
+      model: demoModel.gateway_id,
+      voice: demoVoice.public_name,
+    }, "本地演示音频已返回，未调用厂商接口");
   };
 
   const testStream = async () => {
@@ -358,7 +436,7 @@ export function GatewayPage() {
     <section className="page-section gateway-page">
       <div className="gateway-header">
         <WorkspaceHero
-          title="把 VoxNest"
+          title="把 Voice Hub"
           accent="接入你的应用。"
           description="使用 OpenAI 兼容接口调用四家语音模型。外部应用只需要 Base URL 和网关 Key，厂商凭据始终留在本机后端。"
         />
@@ -428,6 +506,31 @@ export function GatewayPage() {
         <button id="gateway-tab-test" type="button" role="tab" aria-controls="gateway-panel-test" aria-selected={gatewayView === "test"} tabIndex={gatewayView === "test" ? 0 : -1} className={gatewayView === "test" ? "selected" : ""} onClick={() => setGatewayView("test")}><FlaskConical size={16} />接口测试</button>
         <button id="gateway-tab-stats" type="button" role="tab" aria-controls="gateway-panel-stats" aria-selected={gatewayView === "stats"} tabIndex={gatewayView === "stats" ? 0 : -1} className={gatewayView === "stats" ? "selected" : ""} onClick={() => setGatewayView("stats")}><Gauge size={16} />运行统计</button>
       </div>
+
+      <section className="gateway-alias-section" aria-label="模型别名">
+        <div className="gateway-alias-heading">
+          <div><h3>模型别名</h3><p className="gateway-section-note">让外部应用使用固定名称，同时可以在这里更换实际模型。</p></div>
+          <button className="text-button" onClick={resetAliases}><RotateCcw size={14} />恢复默认配置</button>
+        </div>
+        {aliasLoading && <div className="gateway-alias-empty">正在读取模型别名配置...</div>}
+        {!aliasLoading && !aliases.length && <div className="gateway-alias-empty">没有读取到别名配置，请重启 Voice Hub 后刷新页面。</div>}
+        <div className="gateway-alias-grid">
+          {aliases.map((item) => (
+            <article className={`gateway-alias-card ${item.valid ? "" : "invalid"} tone-${aliasMeta[item.alias]?.tone || "default"}`} key={item.alias}>
+              <div className="gateway-alias-card-head"><div className="gateway-alias-identity"><span className="gateway-alias-mark" /><code>{item.alias}</code></div><span className="gateway-alias-status">{item.valid ? "已配置" : "需检查"}</span></div>
+              <div className="gateway-alias-purpose"><strong>{aliasMeta[item.alias]?.label}</strong><span>{aliasMeta[item.alias]?.description}</span></div>
+              <div className="gateway-alias-target"><span>绑定实际模型</span>
+                <select aria-label={`${item.alias} 绑定模型`} value={aliasSelections[item.alias] || item.model_id} onChange={(event) => setAliasSelections((current) => ({ ...current, [item.alias]: event.target.value }))}>
+                  {Object.entries(modelGroups).map(([provider, group]) => <optgroup label={provider} key={provider}>{group.map((model) => <option value={model.gateway_id} key={model.gateway_id}>{model.display_name}</option>)}</optgroup>)}
+                </select>
+                <code>{aliasSelections[item.alias] || item.model_id}</code>
+              </div>
+              <button className="alias-save-button" disabled={aliasSaving || (aliasSelections[item.alias] || item.model_id) === item.model_id} onClick={() => saveAlias(item)}>{aliasSaving && aliasSavingName === item.alias ? "保存中" : "保存绑定"}</button>
+            </article>
+          ))}
+        </div>
+        {aliasMessage && <div className="copy-feedback"><Check size={14} />{aliasMessage}</div>}
+      </section>
 
       {gatewayView === "docs" && (
         <section id="gateway-panel-docs" className="gateway-docs" role="tabpanel" aria-labelledby="gateway-tab-docs" tabIndex={0}>
@@ -539,17 +642,17 @@ export function GatewayPage() {
         <div className="testbench-grid">
           <div className="test-request">
             <div className="test-field-row">
-              <label>模型<select value={testModel} onChange={(event) => setTestModel(event.target.value)}>
+              <label>模型<select value={testModel} onChange={(event) => selectTestModel(event.target.value)}>
                 {credentialProviderIds.map((provider) => {
-                  const items = synthesisModels.filter((item) => item.provider === provider);
+                  const items = testableModels.filter((item) => item.provider === provider);
                   if (!items.length) return null;
                   return <optgroup label={providerMeta[provider].label} key={provider}>{items.map((item) => <option value={item.gateway_id} key={item.gateway_id}>{item.display_name}</option>)}</optgroup>;
                 })}
-              </select></label>
+              </select><small className="test-field-id"><span>API ID</span><code>{selectedTestModel?.gateway_id || "未选择模型"}</code></small></label>
               <label>音色<select value={testVoice} onChange={(event) => setTestVoice(event.target.value)} disabled={!compatibleVoices.length}>
-                {!compatibleVoices.length && <option value="alloy">alloy（请先导入兼容音色）</option>}
+                {!compatibleVoices.length && <option value="">请先导入兼容音色</option>}
                 {compatibleVoices.map((item) => <option value={item.public_name} key={item.id}>{item.display_name} · {item.public_name}</option>)}
-              </select></label>
+              </select><small className="test-field-id"><span>请求值</span><code>{selectedTestVoice?.public_name || "未选择音色"}</code></small></label>
             </div>
             <label className="test-field">测试文本<textarea value={testText} onChange={(event) => setTestText(event.target.value)} maxLength={500} /></label>
             <div className="test-controls">
@@ -560,6 +663,10 @@ export function GatewayPage() {
                 : <button className="secondary-button compact" onClick={testStream} disabled={speechTest.status === "running" || !key || !testModel || !compatibleVoices.length}><Radio size={15} />测试流式{selectedTestModel?.provider === "mimo" ? " · PCM" : ""}</button>}
             </div>
             {selectedTestModel && <div className="test-model-note"><span className={"provider-mark " + providerMeta[selectedTestModel.provider]?.tone}>{providerMeta[selectedTestModel.provider]?.mark}</span><span><strong>{selectedTestModel.display_name}</strong><small>厂商接口 · {compatibleVoices.length} 个兼容音色</small></span></div>}
+            <div className="offline-diagnostic">
+              <div><strong>本地离线诊断</strong><small>使用 demo/local-demo 检查网关和音频返回，不调用厂商接口。</small></div>
+              <button className="secondary-button compact" onClick={testOfflineDemo} disabled={speechTest.status === "running" || streamTest.status === "running" || !key || !demoModel || !demoVoice}><FlaskConical size={15} />运行诊断</button>
+            </div>
           </div>
           <div className="test-result">
             <div className="result-head"><span>响应结果</span><span className={"test-status " + displayedTest.status}><span className="status-dot" />{statusLabel(displayedTest)}</span></div>
@@ -569,7 +676,7 @@ export function GatewayPage() {
             {speechTest.status === "success" && <>
               <div className="result-metrics"><div><span>HTTP</span><strong>{speechTest.statusCode}</strong></div><div><span>延迟</span><strong>{speechTest.latency}ms</strong></div><div><span>大小</span><strong>{formatBytes(speechTest.size)}</strong></div></div>
               {testAudioUrl && <div className="test-player"><Volume2 size={16} /><audio controls src={testAudioUrl} /><a className="download-button" href={testAudioUrl} download={`gateway-test.${testFormat}`} title="下载测试音频"><Download size={16} /></a></div>}
-              <div className="result-detail"><span>Content-Type</span><code>{speechTest.contentType}</code>{speechTest.jobId && <><span>Job</span><code>{speechTest.jobId}</code></>}</div>
+              <div className="result-detail"><span>结果</span><code>{speechTest.message}</code><span>Content-Type</span><code>{speechTest.contentType}</code>{speechTest.jobId && <><span>Job</span><code>{speechTest.jobId}</code></>}</div>
             </>}
             {streamTest.status === "running" && <div className="test-empty stream-live"><RefreshCw size={18} className="spinning" /><span>正在读取 /v1/audio/speech/stream...</span></div>}
             {streamTest.status === "error" && <div className="test-error"><CircleHelp size={17} /><span>{streamTest.message}</span></div>}
@@ -585,7 +692,7 @@ export function GatewayPage() {
           </div>
         </div>
         <div className="gateway-examples">
-          <div className="examples-head"><strong>当前请求示例</strong><button className="inline-copy" onClick={() => copy(exampleTab, examples[exampleTab])} title="复制当前示例"><Copy size={14} /></button></div>
+          <div className="examples-head"><div><strong>当前请求示例</strong><div className="example-request-meta"><span>model <code>{payload.model || "未选择"}</code></span><span>voice <code>{payload.voice || "未选择"}</code></span></div></div><button className="inline-copy" onClick={() => copy(exampleTab, examples[exampleTab])} title="复制当前示例"><Copy size={14} /></button></div>
           <div className="example-tabs">{[["powershell", "PowerShell"], ["curl", "curl"], ["python", "Python"], ["javascript", "JavaScript"], ["stream", "SSE 流式"]].map(([id, label]) => <button className={exampleTab === id ? "selected" : ""} onClick={() => setExampleTab(id)} key={id}>{label}</button>)}</div>
           <pre>{examples[exampleTab]}</pre>
         </div>

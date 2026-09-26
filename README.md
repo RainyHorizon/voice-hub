@@ -1,8 +1,8 @@
-# VoxNest
+# Voice Hub
 
-VoxNest 是一个本地运行的多厂商 AI 语音工作台。它把通义千问、火山引擎、MiniMax 和小米 MiMo 的语音能力集中在一个网页界面中，并提供 OpenAI 兼容 API，方便其他应用调用。
+Voice Hub 是一个本地运行的多厂商云端语音工作台。它通过 API 远程调用通义千问、火山引擎、MiniMax 和小米 MiMo 的语音服务，将模型、音色和任务集中在一个网页界面中，并提供 OpenAI 兼容 API，方便其他应用调用。Voice Hub 本身不加载或运行本地语音模型。
 
-API Key、音频、任务历史和音色信息默认保存在本机，不会上传到 VoxNest 服务端。
+API Key、音频、任务历史和音色信息默认保存在本机，不会上传到 Voice Hub 服务端。
 
 ## 主要功能
 
@@ -41,35 +41,35 @@ API Key、音频、任务历史和音色信息默认保存在本机，不会上�
 
 ### Windows 便携版
 
-1. 在 [Releases](https://github.com/RainyHorizon/VoxNest/releases) 下载 `VoxNest-*-Windows-Portable.zip`。
+1. 在 [Releases](https://github.com/RainyHorizon/voice-hub/releases) 下载 `VoiceHub-*-Windows-Portable.zip`。
 2. 将压缩包完整解压到有写入权限的普通文件夹，不要直接在压缩包预览窗口中运行。
-3. 双击 `启动 VoxNest.bat`。
+3. 双击 `启动 Voice Hub.bat`。
 4. 浏览器打开启动器显示的地址，默认是 `http://127.0.0.1:8765`。
-5. 使用完毕后双击 `停止 VoxNest.bat`；它会自动识别并停止 VoxNest 使用的本地端口。
+5. 使用完毕后双击 `停止 Voice Hub.bat`；它会自动识别并停止 Voice Hub 使用的本地端口。
 
 便携版包含运行所需的 Python、后端依赖、前端文件、FFmpeg 和 FFprobe。数据库、音频和网关配置保存在程序目录的 `data` 文件夹中。升级时请保留这个文件夹。
 
-从首个包含自动更新器的版本开始，可先关闭 VoxNest，再双击 `更新 VoxNest.bat`。更新器会自动识别 Portable、Windows 轻量版或 Git 源码目录，并选择对应的安全更新方式。更早的便携版需要先手动升级一次。
+从首个包含自动更新器的版本开始，可先关闭 Voice Hub，再双击 `更新 Voice Hub.bat`。更新器会自动识别 Portable、Windows 轻量版或 Git 源码目录，并选择对应的安全更新方式。更早的便携版需要先手动升级一次。
 
 ### Windows 轻量版
 
-在 Releases 下载 `VoxNest-*-Windows.zip` 并完整解压，安装 Python 3.11+ 和 FFmpeg 后，双击 `启动 VoxNest.bat`。使用完毕后可双击 `停止 VoxNest.bat`。轻量版已包含预构建前端，通常不需要安装 Node.js。
+在 Releases 下载 `VoiceHub-*-Windows.zip` 并完整解压，安装 Python 3.11+ 和 FFmpeg 后，双击 `启动 Voice Hub.bat`。使用完毕后可双击 `停止 Voice Hub.bat`。轻量版已包含预构建前端，通常不需要安装 Node.js。
 
 ### Windows 安装版（EXE）
 
-Release 同时提供 `VoxNest-*-Windows-Setup.exe`。它是 Inno Setup 安装包，默认安装到当前用户的 `%LOCALAPPDATA%\VoxNest`，不需要管理员权限，并创建开始菜单和桌面快捷方式。安装包内包含独立 Python、FFmpeg、FFprobe 和前端文件，用户不需要另行安装运行环境。`data` 和系统密钥环中的 API Key 会保留在升级过程中。
+Release 同时提供 `VoiceHub-*-Windows-Setup.exe`。它是 Inno Setup 安装包，默认安装到当前用户的 `%LOCALAPPDATA%\Voice Hub`，不需要管理员权限，并创建开始菜单和桌面快捷方式。安装包内包含独立 Python、FFmpeg、FFprobe 和前端文件，用户不需要另行安装运行环境。`data` 和系统密钥环中的 API Key 会保留在升级过程中。
 
 安装版与便携版使用相同的程序核心；升级时可以运行新版 Setup 覆盖安装。当前目录更新器会轮询 GitHub 并下载、校验 Portable 包后替换程序文件。首次安装后，Windows 客户端只能通过“检查更新”或启动时轮询发现新版本，GitHub 无法直接向离线客户端推送进程消息。
 
-自动更新器仅信任 `RainyHorizon/VoxNest` 官方仓库，并会在替换程序文件前校验 Release 中提供的 SHA256。
+自动更新器仅信任 `RainyHorizon/voice-hub` 官方仓库，并会在替换程序文件前校验 Release 中提供的 SHA256。
 
 ### Windows 源码启动
 
 先安装 Python 3.11+ 和 FFmpeg，并将它们加入系统 `Path`。如果仓库没有预构建的前端文件，还需要 Node.js 20+。
 
 ```powershell
-git clone https://github.com/RainyHorizon/VoxNest.git
-Set-Location VoxNest
+git clone https://github.com/RainyHorizon/voice-hub.git
+Set-Location voice-hub
 .\start.ps1 -OpenBrowser
 ```
 
@@ -90,8 +90,8 @@ Set-Location VoxNest
 安装 Python 3.11+、FFmpeg/FFprobe，并确保当前用户可以使用系统密钥环（macOS Keychain，或 Linux Secret Service、GNOME Keyring、KWallet）。
 
 ```bash
-git clone https://github.com/RainyHorizon/VoxNest.git
-cd VoxNest
+git clone https://github.com/RainyHorizon/voice-hub.git
+cd voice-hub
 chmod +x start.sh
 ./start.sh --open-browser
 ```
@@ -104,11 +104,11 @@ chmod +x start.sh
 
 | 当前安装方式 | 更新入口 | 更新来源 |
 | --- | --- | --- |
-| Windows Portable | 双击 `更新 VoxNest.bat` | 最新正式版 Portable ZIP |
+| Windows Portable | 双击 `更新 Voice Hub.bat` | 最新正式版 Portable ZIP |
 | Windows 安装版 | 运行新版 Setup 或安装目录中的更新器 | 最新正式版 Setup/Portable |
-| Windows 轻量版 | 双击 `更新 VoxNest.bat` | 最新正式版 Windows ZIP |
-| Windows Git 源码 | 双击 `更新 VoxNest.bat` | 当前分支的上游 Git 分支 |
-| Windows Source ZIP | 双击 `更新 VoxNest.bat` | 最新正式版 Windows ZIP |
+| Windows 轻量版 | 双击 `更新 Voice Hub.bat` | 最新正式版 Windows ZIP |
+| Windows Git 源码 | 双击 `更新 Voice Hub.bat` | 当前分支的上游 Git 分支 |
+| Windows Source ZIP | 双击 `更新 Voice Hub.bat` | 最新正式版 Windows ZIP |
 | macOS / Linux Release 包 | `bash update.sh` | 对应系统的最新正式版 TAR 包 |
 | macOS / Linux Git 源码 | `bash update.sh` | 当前分支的上游 Git 分支 |
 | macOS / Linux Source ZIP | `bash update.sh` | 对应系统的最新正式版 TAR 包 |
@@ -130,8 +130,8 @@ bash update.sh --check
 Docker 使用环境变量读取厂商密钥，不访问宿主机的系统密钥环。
 
 ```bash
-git clone https://github.com/RainyHorizon/VoxNest.git
-cd VoxNest
+git clone https://github.com/RainyHorizon/voice-hub.git
+cd voice-hub
 cp .env.example .env
 ```
 
@@ -140,7 +140,7 @@ cp .env.example .env
 ```bash
 docker compose up -d
 docker compose ps
-docker compose logs -f voxnest
+docker compose logs -f voice-hub
 ```
 
 默认地址为 `http://127.0.0.1:8765`。停止服务但保留 `data` 数据：
@@ -158,11 +158,22 @@ docker compose up -d --no-build
 
 如果使用本地源码构建镜像，则先更新 Git 源码，再执行 `docker compose up -d --build`。`./data` 挂载目录和 `.env` 不会被镜像更新覆盖。
 
+正式版本镜像发布到 `ghcr.io/rainyhorizon/voice-hub`。例如 `v1.7.0` 对应 `ghcr.io/rainyhorizon/voice-hub:1.7.0`、`ghcr.io/rainyhorizon/voice-hub:v1.7.0` 和 `ghcr.io/rainyhorizon/voice-hub:latest`。
+
 首次使用本地源码构建镜像：
 
 ```bash
 docker compose up -d --build
 ```
+
+## 发布自动化
+
+向 GitHub 推送 `v*.*.*` 格式的标签时，仓库会自动运行两条发布工作流：
+
+- `Build Voice Hub Release Assets`：构建 Windows 轻量版、Windows 便携版、Windows 安装版，以及 Linux/macOS 发布包，并创建带 SHA256 校验文件的 GitHub Release。
+- `Publish Voice Hub Docker Image`：构建并推送 `linux/amd64` 与 `linux/arm64` 的 GHCR 镜像，同时生成版本标签和稳定版的 `latest` 标签。
+
+两条工作流都以标签指向的同一提交为源码。发布前应确保版本文件已同步、CI 已通过，并使用带说明的 Git 标签。
 
 ## 配置厂商 API Key
 
@@ -230,7 +241,7 @@ client = OpenAI(
 with client.audio.speech.with_streaming_response.create(
     model="tts-default",
     voice="mimo-default",
-    input="你好，这是 VoxNest 生成的语音。",
+    input="你好，这是 Voice Hub 生成的语音。",
     response_format="mp3",
 ) as response:
     response.stream_to_file("speech.mp3")
@@ -250,7 +261,7 @@ const client = new OpenAI({
 const response = await client.audio.speech.create({
   model: "tts-default",
   voice: "mimo-default",
-  input: "你好，这是 VoxNest 生成的语音。",
+  input: "你好，这是 Voice Hub 生成的语音。",
   response_format: "mp3",
 });
 

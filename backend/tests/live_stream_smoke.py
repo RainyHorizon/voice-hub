@@ -243,7 +243,7 @@ def run_cancel_case(
         connection.close()
         raise RuntimeError(f"HTTP {response.status}: {message}")
 
-    job_id = response.getheader("X-VoxNest-Job") or ""
+    job_id = response.getheader("X-Voice-Hub-Job") or ""
     chunks = 0
     bytes_received = 0
     first_chunk_ms: int | None = None
@@ -299,7 +299,7 @@ def run_cancel_case(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="VoxNest 真实流式厂商冒烟验证")
+    parser = argparse.ArgumentParser(description="Voice Hub 真实流式厂商冒烟验证")
     parser.add_argument("--server", default="http://127.0.0.1:8765")
     parser.add_argument("--text", default="你好，这是一段流式语音测试。")
     parser.add_argument(

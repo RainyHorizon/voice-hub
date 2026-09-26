@@ -1,6 +1,6 @@
 # 架构说明
 
-VoxNest 是单机优先的 React + FastAPI 应用。浏览器只访问本机后端，厂商密钥不会进入前端代码，也不会由浏览器直接发送到厂商。
+Voice Hub 是单机优先的 React + FastAPI 云端语音聚合应用。浏览器只访问本机后端，后端通过远程 API 调用语音厂商；应用本身不加载或运行本地语音模型。厂商密钥不会进入前端代码，也不会由浏览器直接发送到厂商。
 
 ```mermaid
 flowchart LR
@@ -89,4 +89,16 @@ sequenceDiagram
 ## 测试隔离
 
 后端测试必须从 `backend` 目录使用 pytest 运行。`tests/conftest.py` 会在导入应用前设置临时 `VOICE_STUDIO_ROOT`、移除真实厂商凭据环境变量并阻止非本机网络连接，因此测试不会写入真实 `data/`，也不会调用厂商计费接口。
+
+## 应用装配与生命周期
+
+`backend/app/main.py` 创建 `FastAPI(title="Voice Hub Gateway", version=config.APP_VERSION)`，统一挂载 `system`、`accounts`、`voices`、`gateway`、`jobs` 和 `storage` 路由。若 `frontend/dist` 存在，则挂载 `/assets` 并用最后的 catch-all 路由返回 SPA 的 `index.html`；因此 API 路由必须继续在静态 SPA 路由之前注册。
+
+应用 lifespan 的启动顺序是：创建 `data/audio` 与 `data/logs`、迁移已知旧日志、初始化 SQLite schema、执行一次到期清理，然后启动每小时一次的后台清理任务。关闭时会取消该任务。运行时根目录由 `VOICE_STUDIO_ROOT` 决定，默认是仓库根目录；端口由 `VOICE_STUDIO_PORT` 决定，默认 `8765`。
+
+## 部署与 CI 边界
+
+Dockerfile 使用 Node 22 构建前端、Python 3.12 运行后端，并以非 root `voice` 用户启动 Uvicorn。Compose 将宿主机端口绑定到 `127.0.0.1`，只读挂载 `./data`，容器根文件系统只读，并通过 `GET /api/summary` 健康检查。镜像构建和 Compose 配置校验由 `.github/workflows/ci.yml` 覆盖。推送 `v*.*.*` 标签后，`.github/workflows/release.yml` 构建 Windows、Linux、macOS 发布包并创建 GitHub Release，`.github/workflows/docker-publish.yml` 独立构建并推送 `linux/amd64`、`linux/arm64` 的 GHCR 镜像。
+
+当前源码基线已验证：后端 `python -m pytest -q tests` 为 69 项通过；前端 `npm run lint`、`npm test`（2 个文件、9 项）和 `npm run build` 均通过。CI 还会在三种操作系统上验证测试与系统密钥环，但这些检查不替代目标机器上的桌面密钥环和 FFmpeg 实机诊断。
 

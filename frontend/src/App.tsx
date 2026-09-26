@@ -75,7 +75,7 @@ function AppShell() {
             <AudioLines size={18} />
           </div>
           <div>
-            <strong>VOXNEST</strong>
+            <strong>VOICE HUB</strong>
           </div>
           <button
             className="sidebar-toggle"
@@ -116,7 +116,7 @@ function AppShell() {
           <div className="notice" role="status" aria-live="polite" aria-atomic="true">
             <Activity size={15} />
             {notice}
-            {updateAvailable && notice.startsWith("发现 VoxNest") && <>
+            {updateAvailable && notice.startsWith("发现 Voice Hub") && <>
               {updateInstallable && <button type="button" className="notice-update" onClick={() => void installUpdate()} disabled={updateInstalling}>{updateInstalling ? "更新中…" : "立即更新"}</button>}
               <a href={updateUrl} target="_blank" rel="noreferrer">打开 Release</a>
             </>}

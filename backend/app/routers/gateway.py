@@ -34,8 +34,64 @@ from ..services import (
     storage_path,
     voice_payload,
 )
+from ..providers.base import ProviderModel
 
 router = APIRouter()
+
+ALIAS_DEFAULTS = {
+    "tts-default": "mimo/mimo-v2.5-tts",
+    "tts-fast": "dashscope/qwen3-tts-flash",
+    "tts-hq": "mimo/mimo-v2.5-tts",
+}
+
+
+def gateway_aliases() -> list[dict[str, Any]]:
+    with db() as connection:
+        rows = connection.execute(
+            "SELECT alias, model_id, updated_at FROM gateway_model_aliases ORDER BY CASE alias WHEN 'tts-default' THEN 1 WHEN 'tts-fast' THEN 2 WHEN 'tts-hq' THEN 3 ELSE 4 END, alias"
+        ).fetchall()
+    models = {model.gateway_id: model for model in available_models()}
+    return [
+        {
+            "alias": row["alias"],
+            "model_id": row["model_id"],
+            "updated_at": row["updated_at"],
+            "model": openai_model_item(models[row["model_id"]]) if row["model_id"] in models else None,
+            "valid": row["model_id"] in models and "synthesis" in models[row["model_id"]].operations,
+        }
+        for row in rows
+    ]
+
+
+@router.get("/api/gateway/aliases")
+def get_gateway_aliases():
+    return {"aliases": gateway_aliases()}
+
+
+@router.put("/api/gateway/aliases/{alias}")
+def update_gateway_alias(alias: str, payload: dict[str, Any]):
+    if alias not in ALIAS_DEFAULTS:
+        raise HTTPException(status_code=404, detail="不支持的模型别名")
+    model_id = str(payload.get("model_id") or "").strip()
+    model = next((item for item in available_models() if item.gateway_id == model_id), None)
+    if model is None or "synthesis" not in model.operations or model.mode == "demo":
+        raise HTTPException(status_code=400, detail="请选择支持语音合成的已配置模型")
+    with db() as connection:
+        connection.execute(
+            "UPDATE gateway_model_aliases SET model_id=?, updated_at=? WHERE alias=?",
+            (model_id, now(), alias),
+        )
+    return {"aliases": gateway_aliases(), "message": "模型别名已更新"}
+
+
+@router.post("/api/gateway/aliases/reset")
+def reset_gateway_aliases():
+    with db() as connection:
+        connection.executemany(
+            "UPDATE gateway_model_aliases SET model_id=?, updated_at=? WHERE alias=?",
+            [(model_id, now(), alias) for alias, model_id in ALIAS_DEFAULTS.items()],
+        )
+    return {"aliases": gateway_aliases(), "message": "模型别名已恢复默认"}
 
 
 def _configured_synthesis_limit() -> int:
@@ -130,7 +186,7 @@ def latency_summary(rows: list[sqlite3.Row], column: str) -> dict[str, int | Non
 @router.get("/v1/models", dependencies=[Depends(require_gateway_key)])
 def openai_models():
     items = [openai_model_item(m) for m in available_models() if m.provider != "demo"]
-    items += [{"id": "tts-default", "object": "model", "created": int(time.time()), "owned_by": "voice-studio"}, {"id": "tts-fast", "object": "model", "created": int(time.time()), "owned_by": "voice-studio"}, {"id": "tts-hq", "object": "model", "created": int(time.time()), "owned_by": "voice-studio"}]
+    items += [{"id": "tts-default", "object": "model", "created": int(time.time()), "owned_by": "voice-hub"}, {"id": "tts-fast", "object": "model", "created": int(time.time()), "owned_by": "voice-hub"}, {"id": "tts-hq", "object": "model", "created": int(time.time()), "owned_by": "voice-hub"}]
     return {"object": "list", "data": items}
 
 
@@ -228,11 +284,11 @@ async def openai_speech(body: SynthesisBody):
         audio_bytes=output_size, input_chars=len(body.input), response_format=response_format,
     )
     headers = {
-        "X-VoxNest-Job": job_id,
-        "X-VoxNest-Request-Id": request_id,
-        "X-VoxNest-Latency-Ms": str(elapsed),
-        "X-VoxNest-Mode": "demo" if result.get("demo") else "provider",
-        "X-VoxNest-Response-Format": response_format,
+        "X-Voice-Hub-Job": job_id,
+        "X-Voice-Hub-Request-Id": request_id,
+        "X-Voice-Hub-Latency-Ms": str(elapsed),
+        "X-Voice-Hub-Mode": "demo" if result.get("demo") else "provider",
+        "X-Voice-Hub-Response-Format": response_format,
         "X-Voice-Studio-Job": job_id,
         "X-Voice-Studio-Request-Id": request_id,
         "X-Voice-Studio-Latency-Ms": str(elapsed),
@@ -242,10 +298,10 @@ async def openai_speech(body: SynthesisBody):
     if response_format == "pcm":
         headers.update(
             {
-                "X-VoxNest-PCM-Encoding": "s16le",
-                "X-VoxNest-PCM-Sample-Rate": str(wav_info.get("sample_rate", "unknown")),
-                "X-VoxNest-PCM-Channels": str(wav_info.get("channels", "unknown")),
-                "X-VoxNest-PCM-Bit-Depth": "16",
+                "X-Voice-Hub-PCM-Encoding": "s16le",
+                "X-Voice-Hub-PCM-Sample-Rate": str(wav_info.get("sample_rate", "unknown")),
+                "X-Voice-Hub-PCM-Channels": str(wav_info.get("channels", "unknown")),
+                "X-Voice-Hub-PCM-Bit-Depth": "16",
             }
         )
     return FileResponse(output_path, media_type=media_type, filename=output_path.name, headers=headers)
@@ -543,10 +599,10 @@ async def openai_speech_stream(body: StreamingSynthesisBody):
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
-            "X-VoxNest-Job": job_id,
-            "X-VoxNest-Request-Id": request_id,
-            "X-VoxNest-Stream": "sse",
-            "X-VoxNest-Chunk-Encoding": "base64",
+            "X-Voice-Hub-Job": job_id,
+            "X-Voice-Hub-Request-Id": request_id,
+            "X-Voice-Hub-Stream": "sse",
+            "X-Voice-Hub-Chunk-Encoding": "base64",
             "X-Voice-Studio-Job": job_id,
             "X-Voice-Studio-Request-Id": request_id,
             "X-Voice-Studio-Stream": "sse",

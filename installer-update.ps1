@@ -1,4 +1,4 @@
-﻿param(
+param(
   [Parameter(Mandatory=$true)][string]$InstallDirectory,
   [Parameter(Mandatory=$true)][int]$ParentProcessId,
   [Parameter(Mandatory=$true)][string]$SetupUrl,
@@ -25,12 +25,12 @@ function Get-Sha256([string]$Path) {
 }
 try {
   if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw 'Invalid release version.' }
-  if (-not (Test-Path -LiteralPath (Join-Path $root 'voxnest-install.ini'))) { throw 'Not a VoxNest Setup installation.' }
-  $prefix = 'https://github.com/RainyHorizon/VoxNest/releases/download/'
+  if (-not (Test-Path -LiteralPath (Join-Path $root 'voice-hub-install.ini'))) { throw 'Not a Voice Hub Setup installation.' }
+  $prefix = 'https://github.com/RainyHorizon/voice-hub/releases/download/'
   foreach ($url in @($SetupUrl, $ChecksumUrl)) {
     if (-not $url.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) { throw 'Untrusted update URL.' }
   }
-  $setup = Join-Path $downloadRoot 'VoxNest-Setup.exe'
+  $setup = Join-Path $downloadRoot 'VoiceHub-Setup.exe'
   $checksum = Join-Path $downloadRoot 'setup.sha256'
   Invoke-WebRequest -UseBasicParsing -Uri $SetupUrl -OutFile $setup -TimeoutSec 600
   Invoke-WebRequest -UseBasicParsing -Uri $ChecksumUrl -OutFile $checksum -TimeoutSec 60
@@ -40,14 +40,14 @@ try {
   Set-Content -LiteralPath $ReadyFile -Value 'ready' -Encoding Ascii
   $deadline = (Get-Date).AddMinutes(5)
   while (Get-Process -Id $ParentProcessId -ErrorAction SilentlyContinue) {
-    if ((Get-Date) -gt $deadline) { throw 'VoxNest did not exit; update cancelled.' }
+    if ((Get-Date) -gt $deadline) { throw 'Voice Hub did not exit; update cancelled.' }
     Start-Sleep -Seconds 1
   }
   $arguments = '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /DIR="' + $root + '" /LOG="' + (Join-Path $downloadRoot 'setup.log') + '"'
   $process = Start-Process -FilePath $setup -ArgumentList $arguments -Wait -PassThru -WindowStyle Hidden
   if ($process.ExitCode -ne 0) { throw "Installer failed: $($process.ExitCode)" }
   Set-Content -LiteralPath $logFile -Value "Updated to $Version" -Encoding UTF8
-  Start-Process -FilePath (Join-Path $root 'VoxNest.exe') -WorkingDirectory $root -WindowStyle Hidden
+  Start-Process -FilePath (Join-Path $root 'VoiceHub.exe') -WorkingDirectory $root -WindowStyle Hidden
 } catch {
   $_.Exception.Message | Set-Content -LiteralPath $logFile -Encoding UTF8
   Set-Content -LiteralPath $ReadyFile -Value ('error:' + $_.Exception.Message) -Encoding UTF8

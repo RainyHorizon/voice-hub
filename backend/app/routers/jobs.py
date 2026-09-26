@@ -203,7 +203,7 @@ def download_job_audio(job_id: str):
         raise HTTPException(404, "任务不存在")
     path = _job_audio_path(row)
     media_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
-    return FileResponse(path, media_type=media_type, filename=f"voice-studio-{job_id}{path.suffix}")
+    return FileResponse(path, media_type=media_type, filename=f"voice-hub-{job_id}{path.suffix}")
 
 
 @router.get("/api/jobs/{job_id}/text")
@@ -218,7 +218,7 @@ def download_job_text(job_id: str):
     return Response(
         content=text,
         media_type="text/plain",
-        headers={"Content-Disposition": f'attachment; filename="voice-studio-{job_id}.txt"'},
+        headers={"Content-Disposition": f'attachment; filename="voice-hub-{job_id}.txt"'},
     )
 
 
@@ -261,7 +261,7 @@ def export_jobs(body: JobBatchBody):
     return FileResponse(
         archive_path,
         media_type="application/zip",
-        filename="voice-studio-jobs.zip",
+        filename="voice-hub-jobs.zip",
         background=BackgroundTask(archive_path.unlink, missing_ok=True),
     )
 

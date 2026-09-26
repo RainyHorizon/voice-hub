@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# VoxNest source launcher for macOS and Linux.
+# Voice Hub source launcher for macOS and Linux.
 # Keep this script dependency-light so it also works from a fresh checkout.
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 BACKEND_DIR="$SCRIPT_DIR/backend"
@@ -11,8 +11,8 @@ PYTHON_BIN="${PYTHON_BIN:-}"
 PORT="${VOICE_STUDIO_PORT:-8765}"
 OPEN_BROWSER=0
 
-log() { printf '[VoxNest] %s\n' "$1"; }
-fail() { printf '\nVoxNest 启动失败\n%s\n' "$1" >&2; exit 1; }
+log() { printf '[Voice Hub] %s\n' "$1"; }
+fail() { printf '\nVoice Hub 启动失败\n%s\n' "$1" >&2; exit 1; }
 
 usage() {
   cat <<'EOF'
@@ -119,7 +119,7 @@ if ((OPEN_BROWSER)); then
   (sleep 2; "$VENV_PYTHON" -m webbrowser "http://127.0.0.1:$PORT") >/dev/null 2>&1 &
 fi
 
-printf '\nVoxNest 已准备完成：http://127.0.0.1:%s\n' "$PORT"
+printf '\nVoice Hub 已准备完成：http://127.0.0.1:%s\n' "$PORT"
 printf '关闭此终端或按 Ctrl+C 即可停止服务。\n'
 exec "$VENV_PYTHON" -m uvicorn app.main:app --host 127.0.0.1 --port "$PORT"
 

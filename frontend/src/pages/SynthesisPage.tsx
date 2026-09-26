@@ -134,7 +134,7 @@ export function SynthesisPage() {
         <div className="player latest-player">
           <div className="player-icon"><Volume2 size={20} /></div>
           <div className="player-main"><div className="player-title"><strong>刚刚生成</strong><span>{p.selectedVoice?.display_name || p.voice} · {p.format.toUpperCase()}</span></div><p className="player-text">{p.text}</p><audio controls src={p.audioUrl} /></div>
-          <a className="download-button" href={p.audioUrl} download={"voice-studio." + p.format} title="下载"><Download size={17} /></a>
+          <a className="download-button" href={p.audioUrl} download={"voice-hub." + p.format} title="下载"><Download size={17} /></a>
         </div>
       )}
       </div>

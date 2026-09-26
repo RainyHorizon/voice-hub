@@ -1,6 +1,6 @@
 # API 参考
 
-VoxNest 默认在本机 `http://127.0.0.1:8765` 提供管理 API 和 OpenAI 兼容网关。启动后也可以打开 FastAPI 自动生成的交互文档：
+Voice Hub 默认在本机 `http://127.0.0.1:8765` 提供管理 API 和 OpenAI 兼容网关。启动后也可以打开 FastAPI 自动生成的交互文档：
 
 - Swagger UI：`http://127.0.0.1:8765/docs`
 - OpenAPI JSON：`http://127.0.0.1:8765/openapi.json`
@@ -31,6 +31,8 @@ Authorization: Bearer <Gateway Key>
 | `tts-fast` | 低延迟模型 |
 | `tts-hq` | 高质量模型 |
 
+三个别名可以在网页的“API 网关 → 模型别名”区域修改，分别绑定到任意已配置且支持语音合成的模型。修改后立即生效；恢复默认会指向 `mimo/mimo-v2.5-tts`、`dashscope/qwen3-tts-flash`、`mimo/mimo-v2.5-tts`。也可以使用本地管理接口读取或修改：`GET /api/gateway/aliases`、`PUT /api/gateway/aliases/{alias}`、`POST /api/gateway/aliases/reset`。
+
 ### `POST /v1/audio/speech`
 
 生成完整音频文件。请求体：
@@ -44,7 +46,7 @@ Authorization: Bearer <Gateway Key>
 | `speed` | number | 否 | `0.25` 到 `4.0`，默认 `1.0` |
 | `instructions` | string | 否 | 支持指令控制的模型可使用，最多 2000 字符 |
 
-成功时直接返回音频二进制，并附带 `X-VoxNest-Job`、`X-VoxNest-Request-Id`、响应格式和延迟等响应头。PCM 是 `s16le` 原始数据，采样率、声道数和位深见 `X-VoxNest-PCM-*` 响应头。
+成功时直接返回音频二进制，并附带 `X-Voice-Hub-Job`、`X-Voice-Hub-Request-Id`、响应格式和延迟等响应头。PCM 是 `s16le` 原始数据，采样率、声道数和位深见 `X-Voice-Hub-PCM-*` 响应头。
 
 ### `POST /v1/audio/speech/stream`
 

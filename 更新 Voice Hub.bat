@@ -5,12 +5,12 @@ cd /d "%~dp0"
 
 if not exist "%~dp0update.ps1" (
   echo 更新组件不完整，缺少 update.ps1。
-  echo 请从 VoxNest 官方 GitHub Releases 重新下载 Windows Portable 版本。
+  echo 请从 Voice Hub 官方 GitHub Releases 重新下载 Windows Portable 版本。
   pause
   exit /b 1
 )
 
-set "VOICE_STUDIO_UPDATER=%TEMP%\VoxNest-Updater-%RANDOM%-%RANDOM%.ps1"
+set "VOICE_STUDIO_UPDATER=%TEMP%\VoiceHub-Updater-%RANDOM%-%RANDOM%.ps1"
 copy /y "%~dp0update.ps1" "%VOICE_STUDIO_UPDATER%" >nul
 if errorlevel 1 (
   echo 无法创建临时更新程序，请检查 TEMP 目录是否可写。
