@@ -1,4 +1,4 @@
-param(
+﻿param(
   [string]$InstallDirectory = "",
   [switch]$CheckOnly,
   [switch]$Yes
