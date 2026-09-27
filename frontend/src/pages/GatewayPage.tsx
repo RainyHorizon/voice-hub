@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Activity,
   Check,
@@ -6,23 +6,50 @@ import {
   CircleHelp,
   Code2,
   Copy,
-  Download,
   Eye,
   EyeOff,
   FlaskConical,
   Gauge,
+  KeyRound,
   Play,
   Radio,
   RefreshCw,
   RotateCcw,
   ShieldCheck,
-  Volume2,
   X,
 } from "lucide-react";
+import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useConfirm } from "@/components/feedback/ConfirmProvider";
+import { cn } from "@/lib/utils";
 import { api, responseError } from "../api";
 import { pcmChunksToWavBlob, type PcmInfo } from "../audio";
-import { WorkspaceHero } from "../components/WorkspaceHero";
-import { handleTabListKeyDown } from "../components/tabs";
+import { AudioPreview } from "../audio/AudioPreview";
+import { ProviderMark } from "../components/ProviderMark";
+import { Field, Note } from "../components/form/Field";
+import { PageHeader } from "../components/layout/PageHeader";
 import { useStudio } from "../context/StudioContext";
 import type { GatewayAlias, GatewayStats } from "../types";
 import { apiTestModels, credentialProviderIds, providerMeta, voiceMatchesModel } from "../utils";
@@ -41,11 +68,28 @@ type GatewayTestResult = {
   format?: string;
 };
 
+type GatewayView = "docs" | "test" | "stats";
+
+const segmentItem = "h-8 rounded-sm px-3 text-[13px] data-[state=on]:bg-card data-[state=on]:text-foreground data-[state=on]:shadow-sm";
+const exampleTabs = [
+  ["powershell", "PowerShell"],
+  ["curl", "curl"],
+  ["python", "Python"],
+  ["javascript", "JavaScript"],
+  ["stream", "SSE 流式"],
+] as const;
+const statsWindows = [
+  ["24h", "24 小时"],
+  ["7d", "7 天"],
+  ["30d", "30 天"],
+  ["all", "全部"],
+] as const;
+
 export function GatewayPage() {
   const { gateway, models, voices } = useStudio();
+  const confirm = useConfirm();
   const [current, setCurrent] = useState(gateway);
   const [visibleKey, setVisibleKey] = useState(false);
-  const [copied, setCopied] = useState("");
   const [rotating, setRotating] = useState(false);
   const [testModel, setTestModel] = useState("");
   const [testVoice, setTestVoice] = useState("");
@@ -62,7 +106,7 @@ export function GatewayPage() {
   const [statsWindow, setStatsWindow] = useState("7d");
   const [statsProvider, setStatsProvider] = useState("");
   const [statsLoading, setStatsLoading] = useState(false);
-  const [gatewayView, setGatewayView] = useState<"docs" | "test" | "stats">("docs");
+  const [gatewayView, setGatewayView] = useState<GatewayView>("docs");
   const [openEndpoint, setOpenEndpoint] = useState("");
   const [aliases, setAliases] = useState<GatewayAlias[]>([]);
   const [aliasSelections, setAliasSelections] = useState<Record<string, string>>({});
@@ -92,9 +136,9 @@ export function GatewayPage() {
   const demoVoice = voices.find((item) => voiceMatchesModel(item, demoModel));
   const streamFormat = selectedTestModel?.provider === "mimo" ? "pcm" : "mp3";
   const aliasMeta: Record<string, { label: string; description: string; tone: string }> = {
-    "tts-default": { label: "通用默认", description: "日常使用的平衡选择", tone: "default" },
-    "tts-fast": { label: "低延迟", description: "优先响应速度", tone: "fast" },
-    "tts-hq": { label: "高质量", description: "优先声音细节", tone: "hq" },
+    "tts-default": { label: "通用默认", description: "日常使用的平衡选择", tone: "bg-sky-500" },
+    "tts-fast": { label: "低延迟", description: "优先响应速度", tone: "bg-emerald-500" },
+    "tts-hq": { label: "高质量", description: "优先声音细节", tone: "bg-violet-500" },
   };
   const modelGroups = testableModels.reduce<Record<string, typeof testableModels>>((groups, model) => {
     const provider = providerMeta[model.provider]?.label || model.provider;
@@ -143,22 +187,22 @@ export function GatewayPage() {
   const copy = async (label: string, value: string) => {
     try {
       await navigator.clipboard.writeText(value);
-      setCopied(label);
-      window.setTimeout(() => setCopied(""), 1800);
+      toast.success(`已复制${label}`);
     } catch {
-      setCopied("复制失败");
+      toast.error("复制失败，请手动选择复制");
     }
   };
   const rotate = async () => {
-    if (!activeGateway?.managed || !window.confirm("轮换后旧网关 Key 会立即失效，确定继续吗？")) return;
+    if (!activeGateway?.managed) return;
+    if (!(await confirm({ title: "轮换网关 Key？", description: "轮换后旧网关 Key 会立即失效，使用旧 Key 的客户端需要更新配置。", confirmLabel: "轮换", destructive: true }))) return;
     setRotating(true);
     try {
       const result = await api<{ key: string; key_hint: string; key_source: string; managed: boolean }>("/api/gateway/rotate", { method: "POST" });
       setCurrent({ ...activeGateway, key: result.key, key_hint: result.key_hint, key_source: result.key_source, managed: result.managed });
       setVisibleKey(true);
-      setCopied("已生成新 Key");
+      toast.success("已生成新网关 Key", { description: "请同步更新使用旧 Key 的客户端。" });
     } catch (error) {
-      setCopied(error instanceof Error ? error.message : "轮换失败");
+      toast.error(error instanceof Error ? error.message : "轮换失败");
     } finally {
       setRotating(false);
     }
@@ -174,16 +218,22 @@ export function GatewayPage() {
       });
       setAliases(result.aliases);
       setAliasSelections(Object.fromEntries(result.aliases.map((item) => [item.alias, item.model_id])));
-      setAliasMessage(`${alias.alias} 已保存`);
-    } catch (error) { setAliasMessage(error instanceof Error ? error.message : "保存失败"); }
+      setAliasMessage("");
+      toast.success(`${alias.alias} 已保存`);
+    } catch (error) { toast.error(error instanceof Error ? error.message : "保存失败"); }
     finally { setAliasSaving(false); setAliasSavingName(""); }
   };
   const resetAliases = async () => {
-    if (!window.confirm("确定恢复三个模型别名的默认指向吗？")) return;
-    const result = await api<{ aliases: GatewayAlias[] }>("/api/gateway/aliases/reset", { method: "POST" });
-    setAliases(result.aliases);
-    setAliasSelections(Object.fromEntries(result.aliases.map((item) => [item.alias, item.model_id])));
-    setAliasMessage("已恢复默认配置");
+    if (!(await confirm({ title: "恢复默认别名？", description: "三个模型别名会恢复为默认指向。", confirmLabel: "恢复默认" }))) return;
+    try {
+      const result = await api<{ aliases: GatewayAlias[] }>("/api/gateway/aliases/reset", { method: "POST" });
+      setAliases(result.aliases);
+      setAliasSelections(Object.fromEntries(result.aliases.map((item) => [item.alias, item.model_id])));
+      setAliasMessage("");
+      toast.success("已恢复默认配置");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "恢复默认失败");
+    }
   };
   const selectTestModel = (modelId: string) => {
     const nextModel = testableModels.find((item) => item.gateway_id === modelId);
@@ -400,6 +450,7 @@ export function GatewayPage() {
   const displayedTest = streamTest.status !== "idle" ? streamTest : speechTest;
   const formatLatency = (value: number | null) => value === null ? "--" : `${value}ms`;
   const statsProviderLabel = (id: string) => providerMeta[id]?.label || id;
+  const busy = speechTest.status === "running" || streamTest.status === "running";
   const endpointDocs = [
     {
       id: "models",
@@ -432,272 +483,765 @@ export function GatewayPage() {
       example: `curl.exe -N "${endpoint("audio/speech/stream")}" \\\n  -H "Authorization: Bearer $VOICE_STUDIO_API_KEY" \\\n  -H "Content-Type: application/json" \\\n  -d '${JSON.stringify({ ...payload, chunk_size: 4096 })}'`,
     },
   ];
-  return (
-    <section className="page-section gateway-page">
-      <div className="gateway-header">
-        <WorkspaceHero
-          title="把 Voice Hub"
-          accent="接入你的应用。"
-          description="使用 OpenAI 兼容接口调用四家语音模型。外部应用只需要 Base URL 和网关 Key，厂商凭据始终留在本机后端。"
-        />
-      </div>
 
-      <section className="gateway-overview-grid" aria-label="网关凭据与快速开始">
-        <div className="gateway-overview-primary">
-          <div className="gateway-current-key">
-            <div className="gateway-key-heading">
-              <h3>当前网关 Key</h3>
-              <span className="gateway-key-state"><span className="live-dot" />有效</span>
+  return (
+    <section>
+      <PageHeader
+        title="API 网关"
+        description="使用 OpenAI 兼容接口调用四家语音模型。外部应用只需要 Base URL 和网关 Key，厂商凭据始终留在本机后端。"
+        actions={
+          <Button variant="outline" onClick={() => void copy("连接信息", `${base}\nBearer ${key}`)}>
+            <Copy />
+            复制连接信息
+          </Button>
+        }
+      />
+
+      <div className="flex flex-col gap-6">
+        <section aria-label="网关凭据与快速开始" className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(300px,360px)]">
+          <div className="island flex min-w-0 flex-col gap-6 p-6 md:p-7">
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="m-0 flex items-center gap-2 text-base font-semibold text-foreground">
+                  <KeyRound className="size-4 text-brand" />
+                  当前网关 Key
+                </h2>
+                <Badge className="rounded-full bg-emerald-50 px-2.5 font-medium text-emerald-700">
+                  <span className="size-1.5 rounded-full bg-emerald-500" />
+                  有效
+                </Badge>
+              </div>
+              <div className="flex min-w-0 items-center gap-1 rounded-lg border bg-muted/50 py-1.5 pr-1.5 pl-4">
+                <code translate="no" className="min-w-0 flex-1 truncate font-mono text-sm text-foreground" title={visibleKey ? key : undefined}>
+                  {visibleKey ? key : (activeGateway?.key_hint || "未读取")}
+                </code>
+                <IconAction label={visibleKey ? "隐藏网关 Key" : "显示网关 Key"} onClick={() => setVisibleKey((value) => !value)}>
+                  {visibleKey ? <EyeOff /> : <Eye />}
+                </IconAction>
+                <IconAction label="复制网关 Key" onClick={() => void copy("网关 Key", key)} disabled={!key}>
+                  <Copy />
+                </IconAction>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
+                <span>来源：{activeGateway?.key_source || "本地配置"}</span>
+                <Button variant="outline" size="sm" disabled={!activeGateway?.managed || rotating} onClick={() => void rotate()}>
+                  <RotateCcw className={cn(rotating && "animate-spin")} />
+                  {rotating ? "正在轮换" : "轮换网关 Key"}
+                </Button>
+              </div>
             </div>
-            <div className="gateway-key-value">
-              <code>{visibleKey ? key : (activeGateway?.key_hint || "未读取")}</code>
-              <button className="icon-button" onClick={() => setVisibleKey((value) => !value)} title={visibleKey ? "隐藏网关 Key" : "显示网关 Key"} aria-label={visibleKey ? "隐藏网关 Key" : "显示网关 Key"}>
-                {visibleKey ? <EyeOff size={17} /> : <Eye size={17} />}
-              </button>
-              <button className="icon-button" onClick={() => copy("网关 Key", key)} title="复制网关 Key" aria-label="复制网关 Key"><Copy size={16} /></button>
+
+            <div className="flex flex-col gap-3 border-t pt-6">
+              <h3 className="m-0 flex items-center gap-2 text-sm font-semibold text-foreground">
+                <Code2 className="size-4 text-brand" />
+                快速开始
+              </h3>
+              <dl className="m-0 grid gap-3 md:grid-cols-2">
+                <CopyField label="Base URL" value={base} onCopy={() => void copy("Base URL", base)} />
+                <CopyField label="鉴权方式" value="Bearer $VOICE_STUDIO_API_KEY" />
+              </dl>
+              <p className="m-0 text-xs leading-relaxed text-muted-foreground">
+                把 Base URL 填入支持 OpenAI 的客户端，并将当前网关 Key 作为 API Key。
+              </p>
             </div>
-            <div className="gateway-key-footer">
-              <span>来源：{activeGateway?.key_source || "本地配置"}</span>
-              <button className="secondary-button" disabled={!activeGateway?.managed || rotating} onClick={rotate}>
-                <RotateCcw size={14} className={rotating ? "spinning" : ""} />
-                {rotating ? "正在轮换" : "轮换网关 Key"}
-              </button>
-            </div>
-            {copied && <div className="copy-feedback"><Check size={14} />{copied}</div>}
           </div>
-          <div className="gateway-quickstart-card">
-            <div className="gateway-quickstart-title">
-              <span><Code2 size={18} />快速开始</span>
-              <button className="quickstart-copy" onClick={() => copy("连接信息", `${base}\nBearer ${key}`)} title="复制连接信息"><Copy size={15} />复制</button>
+
+          <aside className="island flex min-w-0 flex-col gap-5 p-6 md:p-7">
+            <div>
+              <h2 className="m-0 text-base font-semibold text-foreground">网关访问凭据</h2>
+              <p className="mt-1.5 mb-0 text-sm leading-relaxed text-muted-foreground">
+                这枚密钥用于本机应用访问统一语音网关，不会替代已保存的厂商 API Key。
+              </p>
             </div>
-            <div className="gateway-quickstart-grid">
-              <div><span>Base URL</span><code>{base}</code></div>
-              <div><span>鉴权方式</span><code>Bearer $VOICE_STUDIO_API_KEY</code></div>
-            </div>
-            <p>把 Base URL 填入支持 OpenAI 的客户端，并将当前网关 Key 作为 API Key。</p>
-          </div>
-        </div>
-        <div className="gateway-overview-secondary">
-          <div className="gateway-credential-intro">
-            <h3>网关访问凭据</h3>
-            <p>这枚密钥用于本机应用访问统一语音网关，不会替代已保存的厂商 API Key。</p>
-            <div className="gateway-credential-facts">
-              <div><span>监听范围</span><strong>仅本机</strong></div>
-              <div><span>管理方式</span><strong>{activeGateway?.managed ? "应用托管" : "环境变量"}</strong></div>
-            </div>
-          </div>
-          <aside className="gateway-quickstart-aside">
-            <div className="gateway-security-message">
-              <ShieldCheck size={21} />
-              <p>网关 Key 只应保存在受信任的本机应用中，不要放入公开网页、日志或源码仓库。</p>
-            </div>
-            <div className="gateway-error-format">
-              <Code2 size={19} />
-              <strong>错误格式</strong>
-              <p>失败响应包含稳定错误码与可读消息。</p>
-              <code>{'{"detail":{"code":"INVALID_API_KEY","message":"..."}}'}</code>
+            <dl className="m-0 grid grid-cols-2 gap-3">
+              <Fact label="监听范围" value="仅本机" />
+              <Fact label="管理方式" value={activeGateway?.managed ? "应用托管" : "环境变量"} />
+            </dl>
+            <Note icon={<ShieldCheck />}>网关 Key 只应保存在受信任的本机应用中，不要放入公开网页、日志或源码仓库。</Note>
+            <div className="flex flex-col gap-2">
+              <span className="text-[13px] font-medium text-foreground">错误格式</span>
+              <span className="text-xs text-muted-foreground">失败响应包含稳定错误码与可读消息。</span>
+              <code className="block rounded-md bg-muted px-3 py-2 font-mono text-[11px] leading-relaxed break-all text-soft">
+                {'{"detail":{"code":"INVALID_API_KEY","message":"..."}}'}
+              </code>
             </div>
           </aside>
-        </div>
-      </section>
-
-      <div className="gateway-view-tabs" role="tablist" aria-label="网关页面" onKeyDown={handleTabListKeyDown}>
-        <button id="gateway-tab-docs" type="button" role="tab" aria-controls="gateway-panel-docs" aria-selected={gatewayView === "docs"} tabIndex={gatewayView === "docs" ? 0 : -1} className={gatewayView === "docs" ? "selected" : ""} onClick={() => setGatewayView("docs")}><Code2 size={16} />接入文档</button>
-        <button id="gateway-tab-test" type="button" role="tab" aria-controls="gateway-panel-test" aria-selected={gatewayView === "test"} tabIndex={gatewayView === "test" ? 0 : -1} className={gatewayView === "test" ? "selected" : ""} onClick={() => setGatewayView("test")}><FlaskConical size={16} />接口测试</button>
-        <button id="gateway-tab-stats" type="button" role="tab" aria-controls="gateway-panel-stats" aria-selected={gatewayView === "stats"} tabIndex={gatewayView === "stats" ? 0 : -1} className={gatewayView === "stats" ? "selected" : ""} onClick={() => setGatewayView("stats")}><Gauge size={16} />运行统计</button>
-      </div>
-
-      <section className="gateway-alias-section" aria-label="模型别名">
-        <div className="gateway-alias-heading">
-          <div><h3>模型别名</h3><p className="gateway-section-note">让外部应用使用固定名称，同时可以在这里更换实际模型。</p></div>
-          <button className="text-button" onClick={resetAliases}><RotateCcw size={14} />恢复默认配置</button>
-        </div>
-        {aliasLoading && <div className="gateway-alias-empty">正在读取模型别名配置...</div>}
-        {!aliasLoading && !aliases.length && <div className="gateway-alias-empty">没有读取到别名配置，请重启 Voice Hub 后刷新页面。</div>}
-        <div className="gateway-alias-grid">
-          {aliases.map((item) => (
-            <article className={`gateway-alias-card ${item.valid ? "" : "invalid"} tone-${aliasMeta[item.alias]?.tone || "default"}`} key={item.alias}>
-              <div className="gateway-alias-card-head"><div className="gateway-alias-identity"><span className="gateway-alias-mark" /><code>{item.alias}</code></div><span className="gateway-alias-status">{item.valid ? "已配置" : "需检查"}</span></div>
-              <div className="gateway-alias-purpose"><strong>{aliasMeta[item.alias]?.label}</strong><span>{aliasMeta[item.alias]?.description}</span></div>
-              <div className="gateway-alias-target"><span>绑定实际模型</span>
-                <select aria-label={`${item.alias} 绑定模型`} value={aliasSelections[item.alias] || item.model_id} onChange={(event) => setAliasSelections((current) => ({ ...current, [item.alias]: event.target.value }))}>
-                  {Object.entries(modelGroups).map(([provider, group]) => <optgroup label={provider} key={provider}>{group.map((model) => <option value={model.gateway_id} key={model.gateway_id}>{model.display_name}</option>)}</optgroup>)}
-                </select>
-                <code>{aliasSelections[item.alias] || item.model_id}</code>
-              </div>
-              <button className="alias-save-button" disabled={aliasSaving || (aliasSelections[item.alias] || item.model_id) === item.model_id} onClick={() => saveAlias(item)}>{aliasSaving && aliasSavingName === item.alias ? "保存中" : "保存绑定"}</button>
-            </article>
-          ))}
-        </div>
-        {aliasMessage && <div className="copy-feedback"><Check size={14} />{aliasMessage}</div>}
-      </section>
-
-      {gatewayView === "docs" && (
-        <section id="gateway-panel-docs" className="gateway-docs" role="tabpanel" aria-labelledby="gateway-tab-docs" tabIndex={0}>
-          <div className="gateway-docs-heading">
-            <h3>OpenAI 兼容接口</h3>
-            <span>{endpointDocs.length} 个端点</span>
-          </div>
-          {endpointDocs.map((item) => {
-            const expanded = openEndpoint === item.id;
-            return (
-              <article className={expanded ? "gateway-endpoint expanded" : "gateway-endpoint"} key={item.id}>
-                <button className="gateway-endpoint-trigger" aria-expanded={expanded} onClick={() => setOpenEndpoint(expanded ? "" : item.id)}>
-                  <span className={item.method === "GET" ? "gateway-method get" : "gateway-method post"}>{item.method}</span>
-                  <code>{item.path}</code>
-                  <span className="gateway-endpoint-summary">{item.description}</span>
-                  <ChevronRight size={17} />
-                </button>
-                {expanded && (
-                  <div className="gateway-endpoint-body">
-                    <div className="gateway-endpoint-details">
-                      <div><span>请求</span><p>{item.request}</p></div>
-                      <div><span>响应</span><p>{item.response}</p></div>
-                      <div><span>注意</span><p>{item.note}</p></div>
-                    </div>
-                    <div className="gateway-doc-code">
-                      <div><span>cURL</span><button className="quickstart-copy" onClick={() => copy(`${item.method} ${item.path}`, item.example)}><Copy size={14} />复制</button></div>
-                      <pre>{item.example}</pre>
-                    </div>
-                  </div>
-                )}
-              </article>
-            );
-          })}
         </section>
-      )}
 
-      {gatewayView === "stats" && <section id="gateway-panel-stats" className="gateway-observability" role="tabpanel" aria-labelledby="gateway-tab-stats" tabIndex={0}>
-        <div className="observability-head">
-          <div>
-            <h3>运行统计</h3>
-            <p>仅统计本版本启用记录后的网关语音请求，不混入旧任务数据。</p>
-          </div>
-          <div className="observability-controls">
-            <div className="segmented compact-segmented">
-              {[['24h', '24 小时'], ['7d', '7 天'], ['30d', '30 天'], ['all', '全部']].map(([id, label]) => (
-                <button className={statsWindow === id ? "selected" : ""} onClick={() => setStatsWindow(id)} key={id}>{label}</button>
-              ))}
+        <section aria-labelledby="gateway-alias-title" className="island flex flex-col gap-5 p-6 md:p-7">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 id="gateway-alias-title" className="m-0 text-base font-semibold text-foreground">模型别名</h2>
+              <p className="mt-1 mb-0 text-sm text-muted-foreground">让外部应用使用固定名称，同时可以在这里更换实际模型。</p>
             </div>
-            <select value={statsProvider} onChange={(event) => setStatsProvider(event.target.value)} aria-label="筛选统计来源">
-              <option value="">全部来源</option>
-              {credentialProviderIds.map((id) => <option value={id} key={id}>{providerMeta[id].label}</option>)}
-            </select>
-            <button className="icon-button" onClick={() => refreshStats()} title="刷新统计" disabled={statsLoading}>
-              <RefreshCw size={15} className={statsLoading ? "spinning" : ""} />
-            </button>
+            <Button variant="ghost" size="sm" onClick={() => void resetAliases()} disabled={!aliases.length}>
+              <RotateCcw />
+              恢复默认配置
+            </Button>
           </div>
-        </div>
-        {!stats && statsLoading ? (
-          <div className="stats-empty"><RefreshCw size={17} className="spinning" />正在读取网关统计...</div>
-        ) : stats && stats.total_requests > 0 ? (
-          <>
-            <div className="gateway-stat-strip">
-              <div><span>请求</span><strong>{stats.total_requests}</strong><small>{stats.completed_requests} 成功 · {stats.failed_requests} 失败</small></div>
-              <div><span>成功率</span><strong>{stats.success_rate}%</strong><small>{stats.sample_count} 个已记录样本</small></div>
-              <div><span>首片 P50 / P95</span><strong>{formatLatency(stats.first_chunk_latency.p50)} <i>/</i> {formatLatency(stats.first_chunk_latency.p95)}</strong><small>{stats.first_chunk_latency.samples} 个流式样本</small></div>
-              <div><span>总耗时 P50 / P95</span><strong>{formatLatency(stats.total_latency.p50)} <i>/</i> {formatLatency(stats.total_latency.p95)}</strong><small>{stats.total_latency.samples} 个耗时样本</small></div>
-              <div><span>取消</span><strong>{stats.cancelled_requests}</strong><small>客户端主动中断</small></div>
+          {aliasLoading && <EmptyHint icon={<RefreshCw className="animate-spin" />}>正在读取模型别名配置...</EmptyHint>}
+          {!aliasLoading && !aliases.length && (
+            <EmptyHint icon={<CircleHelp />}>{aliasMessage || "没有读取到别名配置，请重启 Voice Hub 后刷新页面。"}</EmptyHint>
+          )}
+          {aliases.length > 0 && (
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {aliases.map((item) => {
+                const meta = aliasMeta[item.alias];
+                const selection = aliasSelections[item.alias] || item.model_id;
+                const saving = aliasSaving && aliasSavingName === item.alias;
+                return (
+                  <article
+                    key={item.alias}
+                    className={cn("flex min-w-0 flex-col gap-4 rounded-lg border bg-card p-4", !item.valid && "border-destructive/40 bg-destructive/5")}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span aria-hidden className={cn("size-2 shrink-0 rounded-full", meta?.tone ?? "bg-slate-400")} />
+                        <code className="truncate font-mono text-sm font-semibold text-foreground">{item.alias}</code>
+                      </div>
+                      <Badge className={cn("rounded-full px-2 text-[11px]", item.valid ? "bg-muted text-muted-foreground" : "bg-destructive/10 text-destructive")}>
+                        {item.valid ? "已配置" : "需检查"}
+                      </Badge>
+                    </div>
+                    {meta && (
+                      <div className="leading-tight">
+                        <strong className="text-sm font-semibold text-foreground">{meta.label}</strong>
+                        <span className="ml-2 text-xs text-muted-foreground">{meta.description}</span>
+                      </div>
+                    )}
+                    <Field label="绑定实际模型" hint={<code className="font-mono break-all">{selection}</code>}>
+                      <Select
+                        value={selection}
+                        onValueChange={(value) => setAliasSelections((current) => ({ ...current, [item.alias]: value }))}
+                      >
+                        <SelectTrigger aria-label={`${item.alias} 绑定模型`} translate="no" className="w-full">
+                          <SelectValue placeholder="选择模型" />
+                        </SelectTrigger>
+                        <SelectContent position="popper">
+                          <ModelOptions groups={modelGroups} />
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-auto self-start"
+                      disabled={aliasSaving || selection === item.model_id}
+                      onClick={() => void saveAlias(item)}
+                    >
+                      {saving ? <RefreshCw className="animate-spin" /> : <Check />}
+                      {saving ? "保存中" : "保存绑定"}
+                    </Button>
+                  </article>
+                );
+              })}
             </div>
-            <div className="observability-detail">
-              <div className="stats-table">
-                <div className="stats-table-head"><span>维度</span><span>请求</span><span>成功率</span><span>首片 P95</span><span>总耗时 P95</span></div>
-                {stats.by_provider.map((item) => (
-                  <div className="stats-table-row provider-row" key={`provider-${item.name}`}>
-                    <span><b>{statsProviderLabel(item.name)}</b><small>来源</small></span><code>{item.requests}</code><code>{item.success_rate}%</code><code>{formatLatency(item.first_chunk_latency.p95)}</code><code>{formatLatency(item.total_latency.p95)}</code>
-                  </div>
-                ))}
-                {stats.by_model.slice(0, 8).map((item) => (
-                  <div className="stats-table-row" key={`model-${item.name}`}>
-                    <span><b>{item.name.split('/').pop()}</b><small>{statsProviderLabel(item.name.split('/')[0])} · 模型</small></span><code>{item.requests}</code><code>{item.success_rate}%</code><code>{formatLatency(item.first_chunk_latency.p95)}</code><code>{formatLatency(item.total_latency.p95)}</code>
-                  </div>
-                ))}
+          )}
+        </section>
+
+        <Tabs value={gatewayView} onValueChange={(value) => setGatewayView(value as GatewayView)} className="gap-5">
+          <TabsList aria-label="网关页面" className="self-start">
+            <TabsTrigger value="docs" className="px-4"><Code2 />接入文档</TabsTrigger>
+            <TabsTrigger value="test" className="px-4"><FlaskConical />接口测试</TabsTrigger>
+            <TabsTrigger value="stats" className="px-4"><Gauge />运行统计</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="docs" className="island overflow-hidden">
+            <div className="flex items-center justify-between gap-3 border-b px-6 py-4">
+              <h2 className="m-0 text-base font-semibold text-foreground">OpenAI 兼容接口</h2>
+              <span className="text-xs text-muted-foreground">{endpointDocs.length} 个端点</span>
+            </div>
+            <ul className="m-0 list-none divide-y p-0">
+              {endpointDocs.map((item) => {
+                const expanded = openEndpoint === item.id;
+                return (
+                  <li key={item.id}>
+                    <button
+                      type="button"
+                      aria-expanded={expanded}
+                      aria-controls={`gateway-endpoint-${item.id}`}
+                      onClick={() => setOpenEndpoint(expanded ? "" : item.id)}
+                      className="flex w-full items-center gap-3 px-6 py-4 text-left outline-none hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset"
+                    >
+                      <MethodBadge method={item.method} />
+                      <code translate="no" className="shrink-0 font-mono text-sm font-medium text-foreground">{item.path}</code>
+                      <span className="hidden min-w-0 flex-1 truncate text-sm text-muted-foreground md:block">{item.description}</span>
+                      <ChevronRight className={cn("ml-auto size-4 shrink-0 text-muted-foreground transition-transform duration-200", expanded && "rotate-90")} />
+                    </button>
+                    {expanded && (
+                      <div id={`gateway-endpoint-${item.id}`} className="grid gap-5 px-6 pb-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+                        <dl className="m-0 flex flex-col gap-3 text-sm">
+                          <p className="m-0 text-muted-foreground md:hidden">{item.description}</p>
+                          <DocRow label="请求" value={item.request} />
+                          <DocRow label="响应" value={item.response} />
+                          <DocRow label="注意" value={item.note} />
+                        </dl>
+                        <CodeBlock label="cURL" code={item.example} onCopy={() => void copy(` ${item.method} ${item.path} 示例`, item.example)} />
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </TabsContent>
+
+          <TabsContent value="test" className="flex flex-col gap-6">
+            <div className="island flex flex-col gap-6 p-6 md:p-7">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <h2 className="m-0 text-base font-semibold text-foreground">接口测试台</h2>
+                  <p className="mt-1 mb-0 text-sm text-muted-foreground">先测试模型发现，再用一小段文字确认网关、音色和厂商凭据都能正常工作。</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <span
+                    aria-live="polite"
+                    className={cn(
+                      "text-xs",
+                      catalogTest.status === "success" ? "text-success" : catalogTest.status === "error" ? "text-destructive" : "text-muted-foreground",
+                    )}
+                  >
+                    {catalogLabel}
+                  </span>
+                  <Button variant="outline" size="sm" onClick={() => void testModels()} disabled={catalogTest.status === "running" || !key}>
+                    <FlaskConical className={cn(catalogTest.status === "running" && "animate-pulse")} />
+                    {catalogTest.status === "running" ? "测试中..." : "测试模型接口"}
+                  </Button>
+                </div>
               </div>
-              <div className="error-summary">
-                <div className="error-summary-head"><Activity size={15} /><span>错误聚合</span></div>
-                {stats.errors.length ? stats.errors.slice(0, 6).map((item) => (
-                  <div className="error-summary-row" key={item.code}><code>{item.code}</code><strong>{item.count}</strong></div>
-                )) : <div className="error-summary-empty"><Check size={16} />当前范围没有失败请求</div>}
+
+              <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(320px,420px)]">
+                <div className="flex min-w-0 flex-col gap-5">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <Field label="模型" htmlFor="gateway-test-model" hint={<IdHint label="API ID" value={selectedTestModel?.gateway_id || "未选择模型"} />}>
+                      <Select value={testModel} onValueChange={selectTestModel}>
+                        <SelectTrigger id="gateway-test-model" translate="no" className="w-full">
+                          <SelectValue placeholder="选择模型" />
+                        </SelectTrigger>
+                        <SelectContent position="popper">
+                          {credentialProviderIds.map((provider) => {
+                            const items = testableModels.filter((item) => item.provider === provider);
+                            if (!items.length) return null;
+                            return (
+                              <SelectGroup key={provider}>
+                                <SelectLabel>{providerMeta[provider].label}</SelectLabel>
+                                {items.map((item) => (
+                                  <SelectItem value={item.gateway_id} key={item.gateway_id}>{item.display_name}</SelectItem>
+                                ))}
+                              </SelectGroup>
+                            );
+                          })}
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                    <Field label="音色" htmlFor="gateway-test-voice" hint={<IdHint label="请求值" value={selectedTestVoice?.public_name || "未选择音色"} />}>
+                      <Select value={testVoice} onValueChange={setTestVoice} disabled={!compatibleVoices.length}>
+                        <SelectTrigger id="gateway-test-voice" translate="no" className="w-full">
+                          <SelectValue placeholder="请先导入兼容音色" />
+                        </SelectTrigger>
+                        <SelectContent position="popper">
+                          {compatibleVoices.map((item) => (
+                            <SelectItem value={item.public_name} key={item.id}>
+                              {item.display_name}
+                              <span className="font-mono text-xs text-muted-foreground">{item.public_name}</span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                  </div>
+
+                  <Field label="测试文本" htmlFor="gateway-test-text" aside={<span className="font-mono text-xs text-muted-foreground tabular-nums">{testText.length} / 500</span>}>
+                    <Textarea
+                      id="gateway-test-text"
+                      value={testText}
+                      onChange={(event) => setTestText(event.target.value)}
+                      maxLength={500}
+                      className="min-h-24 resize-y leading-7"
+                    />
+                  </Field>
+
+                  <div className="flex flex-wrap items-center gap-3">
+                    <ToggleGroup
+                      type="single"
+                      value={testFormat}
+                      onValueChange={(value) => value && setTestFormat(value)}
+                      aria-label="输出格式"
+                      className="rounded-md bg-muted p-1"
+                    >
+                      {["mp3", "wav"].map((item) => (
+                        <ToggleGroupItem value={item} key={item} className={segmentItem}>{item.toUpperCase()}</ToggleGroupItem>
+                      ))}
+                    </ToggleGroup>
+                    <Button onClick={() => void testSpeech()} disabled={busy || !key || !testModel || !compatibleVoices.length}>
+                      <Play fill="currentColor" className="size-3.5" />
+                      {speechTest.status === "running" ? "生成中..." : "测试语音接口"}
+                    </Button>
+                    {streamTest.status === "running" ? (
+                      <Button variant="outline" onClick={cancelStream}>
+                        <X />
+                        取消流式
+                      </Button>
+                    ) : (
+                      <Button variant="outline" onClick={() => void testStream()} disabled={speechTest.status === "running" || !key || !testModel || !compatibleVoices.length}>
+                        <Radio />
+                        测试流式{selectedTestModel?.provider === "mimo" ? " · PCM" : ""}
+                      </Button>
+                    )}
+                  </div>
+
+                  {selectedTestModel && (
+                    <div className="flex items-center gap-3 text-sm">
+                      <ProviderMark provider={selectedTestModel.provider} />
+                      <div className="min-w-0 leading-tight">
+                        <div className="truncate font-medium text-foreground">{selectedTestModel.display_name}</div>
+                        <div className="text-xs text-muted-foreground">厂商接口 · {compatibleVoices.length} 个兼容音色</div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex flex-col gap-3 rounded-lg border border-dashed bg-muted/40 p-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <strong className="text-sm font-semibold text-foreground">本地离线诊断</strong>
+                      <p className="mt-0.5 mb-0 text-xs text-muted-foreground">使用 demo/local-demo 检查网关和音频返回，不调用厂商接口。</p>
+                    </div>
+                    <Button variant="outline" size="sm" className="shrink-0 self-start sm:self-auto" onClick={() => void testOfflineDemo()} disabled={busy || !key || !demoModel || !demoVoice}>
+                      <FlaskConical />
+                      运行诊断
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="flex min-w-0 flex-col gap-4 rounded-lg border bg-muted/30 p-5" aria-live="polite">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-semibold text-foreground">响应结果</span>
+                    <StatusBadge status={displayedTest.status}>{statusLabel(displayedTest)}</StatusBadge>
+                  </div>
+                  {speechTest.status === "idle" && streamTest.status === "idle" && (
+                    <EmptyHint icon={<Radio />}>生成一段测试音频后，响应信息会显示在这里。</EmptyHint>
+                  )}
+                  {speechTest.status === "running" && <EmptyHint icon={<RefreshCw className="animate-spin" />}>正在请求 /v1/audio/speech...</EmptyHint>}
+                  {speechTest.status === "error" && <ErrorHint>{speechTest.message}</ErrorHint>}
+                  {speechTest.status === "success" && (
+                    <>
+                      <MetricGrid items={[["HTTP", speechTest.statusCode], ["延迟", `${speechTest.latency}ms`], ["大小", formatBytes(speechTest.size)]]} />
+                      {testAudioUrl && (
+                        <AudioPreview key={testAudioUrl} src={testAudioUrl} label="试听网关测试音频" downloadName={`gateway-test.${testFormat}`} />
+                      )}
+                      <DetailList
+                        items={[
+                          ["结果", speechTest.message],
+                          ["Content-Type", speechTest.contentType],
+                          ...(speechTest.jobId ? [["Job", speechTest.jobId] as const] : []),
+                        ]}
+                      />
+                    </>
+                  )}
+                  {streamTest.status === "running" && <EmptyHint icon={<RefreshCw className="animate-spin" />}>正在读取 /v1/audio/speech/stream...</EmptyHint>}
+                  {streamTest.status === "error" && <ErrorHint>{streamTest.message}</ErrorHint>}
+                  {streamTest.status === "cancelled" && (
+                    <>
+                      <p className="m-0 flex items-start gap-2 rounded-md bg-amber-50 px-3 py-2.5 text-sm text-amber-800">
+                        <X className="mt-0.5 size-4 shrink-0" />
+                        {streamTest.message}
+                      </p>
+                      <MetricGrid
+                        items={[
+                          ["首片", streamTest.firstChunkLatency === undefined ? "--" : `${streamTest.firstChunkLatency}ms`],
+                          ["取消耗时", `${streamTest.latency}ms`],
+                          ["已收分片", streamTest.chunks || 0],
+                          ["已收大小", formatBytes(streamTest.size)],
+                        ]}
+                      />
+                    </>
+                  )}
+                  {streamTest.status === "success" && (
+                    <>
+                      <MetricGrid
+                        items={[
+                          ["首片", `${streamTest.firstChunkLatency}ms`],
+                          ["总耗时", `${streamTest.latency}ms`],
+                          ["分片", streamTest.chunks],
+                          ["大小", formatBytes(streamTest.size)],
+                        ]}
+                      />
+                      {streamAudioUrl && (
+                        <div className="flex flex-col gap-1.5">
+                          <AudioPreview
+                            key={streamAudioUrl}
+                            src={streamAudioUrl}
+                            label="试听流式测试音频"
+                            downloadName={`gateway-stream.${streamTest.format === "pcm" ? "wav" : streamTest.format || "mp3"}`}
+                          />
+                          {streamTest.format === "pcm" && <span className="text-xs text-muted-foreground">PCM 已封装为 WAV 供试听</span>}
+                        </div>
+                      )}
+                      <DetailList
+                        items={[
+                          ["状态", streamTest.message],
+                          ["格式", streamTest.format || "mp3"],
+                          ["HTTP", streamTest.statusCode],
+                          ...(streamTest.nativeStreaming !== undefined ? [["上游", streamTest.nativeStreaming ? "原生分片" : "网关兼容分片"] as const] : []),
+                          ...(streamTest.jobId ? [["Job", streamTest.jobId] as const] : []),
+                        ]}
+                      />
+                    </>
+                  )}
+                </div>
               </div>
             </div>
-          </>
-        ) : (
-          <div className="stats-empty"><Gauge size={18} /><span>当前范围还没有网关语音请求。完成一次接口测试后会开始显示统计。</span></div>
-        )}
-      </section>}
-      {gatewayView === "test" && <div id="gateway-panel-test" className="gateway-testbench" role="tabpanel" aria-labelledby="gateway-tab-test" tabIndex={0}>
-        <div className="testbench-header">
-          <div>
-            <h3>接口测试台</h3>
-            <p>先测试模型发现，再用一小段文字确认网关、音色和厂商凭据都能正常工作。</p>
-          </div>
-          <div className="testbench-actions">
-            <span className={"catalog-result " + catalogTest.status}>{catalogLabel}</span>
-            <button className="secondary-button" onClick={testModels} disabled={catalogTest.status === "running" || !key}>
-              <FlaskConical size={15} className={catalogTest.status === "running" ? "spinning" : ""} />
-              {catalogTest.status === "running" ? "测试中..." : "测试模型接口"}
-            </button>
-          </div>
-        </div>
-        <div className="testbench-grid">
-          <div className="test-request">
-            <div className="test-field-row">
-              <label>模型<select value={testModel} onChange={(event) => selectTestModel(event.target.value)}>
-                {credentialProviderIds.map((provider) => {
-                  const items = testableModels.filter((item) => item.provider === provider);
-                  if (!items.length) return null;
-                  return <optgroup label={providerMeta[provider].label} key={provider}>{items.map((item) => <option value={item.gateway_id} key={item.gateway_id}>{item.display_name}</option>)}</optgroup>;
-                })}
-              </select><small className="test-field-id"><span>API ID</span><code>{selectedTestModel?.gateway_id || "未选择模型"}</code></small></label>
-              <label>音色<select value={testVoice} onChange={(event) => setTestVoice(event.target.value)} disabled={!compatibleVoices.length}>
-                {!compatibleVoices.length && <option value="">请先导入兼容音色</option>}
-                {compatibleVoices.map((item) => <option value={item.public_name} key={item.id}>{item.display_name} · {item.public_name}</option>)}
-              </select><small className="test-field-id"><span>请求值</span><code>{selectedTestVoice?.public_name || "未选择音色"}</code></small></label>
+
+            <div className="island flex flex-col gap-4 p-6 md:p-7">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h2 className="m-0 text-base font-semibold text-foreground">当前请求示例</h2>
+                  <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                    <span>model <code className="font-mono text-foreground">{payload.model || "未选择"}</code></span>
+                    <span>voice <code className="font-mono text-foreground">{payload.voice || "未选择"}</code></span>
+                  </div>
+                </div>
+              </div>
+              <Tabs value={exampleTab} onValueChange={setExampleTab} className="gap-3">
+                <div className="-mx-1 overflow-x-auto px-1">
+                  <TabsList aria-label="示例语言">
+                    {exampleTabs.map(([id, label]) => (
+                      <TabsTrigger value={id} key={id} className="px-3">{label}</TabsTrigger>
+                    ))}
+                  </TabsList>
+                </div>
+                {exampleTabs.map(([id, label]) => (
+                  <TabsContent value={id} key={id}>
+                    <CodeBlock label={label} code={examples[id]} onCopy={() => void copy(` ${label} 示例`, examples[id])} />
+                  </TabsContent>
+                ))}
+              </Tabs>
             </div>
-            <label className="test-field">测试文本<textarea value={testText} onChange={(event) => setTestText(event.target.value)} maxLength={500} /></label>
-            <div className="test-controls">
-              <div><span>格式</span><div className="segmented">{["mp3", "wav"].map((item) => <button className={testFormat === item ? "selected" : ""} onClick={() => setTestFormat(item)} key={item}>{item.toUpperCase()}</button>)}</div></div>
-              <button className="primary-button compact" onClick={testSpeech} disabled={speechTest.status === "running" || streamTest.status === "running" || !key || !testModel || !compatibleVoices.length}><Play size={15} />{speechTest.status === "running" ? "生成中..." : "测试语音接口"}</button>
-              {streamTest.status === "running"
-                ? <button className="secondary-button compact" onClick={cancelStream}><X size={15} />取消流式</button>
-                : <button className="secondary-button compact" onClick={testStream} disabled={speechTest.status === "running" || !key || !testModel || !compatibleVoices.length}><Radio size={15} />测试流式{selectedTestModel?.provider === "mimo" ? " · PCM" : ""}</button>}
+          </TabsContent>
+
+          <TabsContent value="stats" className="island flex flex-col gap-6 p-6 md:p-7">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="min-w-0">
+                <h2 className="m-0 text-base font-semibold text-foreground">运行统计</h2>
+                <p className="mt-1 mb-0 text-sm text-muted-foreground">仅统计本版本启用记录后的网关语音请求，不混入旧任务数据。</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <ToggleGroup
+                  type="single"
+                  value={statsWindow}
+                  onValueChange={(value) => value && setStatsWindow(value)}
+                  aria-label="统计时间范围"
+                  className="rounded-md bg-muted p-1"
+                >
+                  {statsWindows.map(([id, label]) => (
+                    <ToggleGroupItem value={id} key={id} className={segmentItem}>{label}</ToggleGroupItem>
+                  ))}
+                </ToggleGroup>
+                <div className="flex items-center gap-2">
+                <Select value={statsProvider || "all"} onValueChange={(value) => setStatsProvider(value === "all" ? "" : value)}>
+                  <SelectTrigger aria-label="筛选统计来源" className="w-32">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent position="popper" align="end">
+                    <SelectItem value="all">全部来源</SelectItem>
+                    {credentialProviderIds.map((id) => (
+                      <SelectItem value={id} key={id}>{providerMeta[id].label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <IconAction label="刷新统计" onClick={() => void refreshStats()} disabled={statsLoading}>
+                  <RefreshCw className={cn(statsLoading && "animate-spin")} />
+                </IconAction>
+                </div>
+              </div>
             </div>
-            {selectedTestModel && <div className="test-model-note"><span className={"provider-mark " + providerMeta[selectedTestModel.provider]?.tone}>{providerMeta[selectedTestModel.provider]?.mark}</span><span><strong>{selectedTestModel.display_name}</strong><small>厂商接口 · {compatibleVoices.length} 个兼容音色</small></span></div>}
-            <div className="offline-diagnostic">
-              <div><strong>本地离线诊断</strong><small>使用 demo/local-demo 检查网关和音频返回，不调用厂商接口。</small></div>
-              <button className="secondary-button compact" onClick={testOfflineDemo} disabled={speechTest.status === "running" || streamTest.status === "running" || !key || !demoModel || !demoVoice}><FlaskConical size={15} />运行诊断</button>
-            </div>
-          </div>
-          <div className="test-result">
-            <div className="result-head"><span>响应结果</span><span className={"test-status " + displayedTest.status}><span className="status-dot" />{statusLabel(displayedTest)}</span></div>
-            {speechTest.status === "idle" && streamTest.status === "idle" && <div className="test-empty"><Radio size={18} /><span>生成一段测试音频后，响应信息会显示在这里。</span></div>}
-            {speechTest.status === "running" && <div className="test-empty"><RefreshCw size={18} className="spinning" /><span>正在请求 /v1/audio/speech...</span></div>}
-            {speechTest.status === "error" && <div className="test-error"><CircleHelp size={17} /><span>{speechTest.message}</span></div>}
-            {speechTest.status === "success" && <>
-              <div className="result-metrics"><div><span>HTTP</span><strong>{speechTest.statusCode}</strong></div><div><span>延迟</span><strong>{speechTest.latency}ms</strong></div><div><span>大小</span><strong>{formatBytes(speechTest.size)}</strong></div></div>
-              {testAudioUrl && <div className="test-player"><Volume2 size={16} /><audio controls src={testAudioUrl} /><a className="download-button" href={testAudioUrl} download={`gateway-test.${testFormat}`} title="下载测试音频"><Download size={16} /></a></div>}
-              <div className="result-detail"><span>结果</span><code>{speechTest.message}</code><span>Content-Type</span><code>{speechTest.contentType}</code>{speechTest.jobId && <><span>Job</span><code>{speechTest.jobId}</code></>}</div>
-            </>}
-            {streamTest.status === "running" && <div className="test-empty stream-live"><RefreshCw size={18} className="spinning" /><span>正在读取 /v1/audio/speech/stream...</span></div>}
-            {streamTest.status === "error" && <div className="test-error"><CircleHelp size={17} /><span>{streamTest.message}</span></div>}
-            {streamTest.status === "cancelled" && <>
-              <div className="test-cancelled"><X size={17} /><span>{streamTest.message}</span></div>
-              <div className="result-metrics stream-metrics"><div><span>首片</span><strong>{streamTest.firstChunkLatency === undefined ? "--" : `${streamTest.firstChunkLatency}ms`}</strong></div><div><span>取消耗时</span><strong>{streamTest.latency}ms</strong></div><div><span>已收分片</span><strong>{streamTest.chunks || 0}</strong></div><div><span>已收大小</span><strong>{formatBytes(streamTest.size)}</strong></div></div>
-            </>}
-            {streamTest.status === "success" && <>
-              <div className="result-metrics stream-metrics"><div><span>首片</span><strong>{streamTest.firstChunkLatency}ms</strong></div><div><span>总耗时</span><strong>{streamTest.latency}ms</strong></div><div><span>分片</span><strong>{streamTest.chunks}</strong></div><div><span>大小</span><strong>{formatBytes(streamTest.size)}</strong></div></div>
-              {streamAudioUrl && <div className="test-player"><Volume2 size={16} /><audio controls src={streamAudioUrl} />{streamTest.format === "pcm" && <span className="test-audio-note">PCM 已封装为 WAV 供试听</span>}<a className="download-button" href={streamAudioUrl} download={`gateway-stream.${streamTest.format === "pcm" ? "wav" : streamTest.format || "mp3"}`} title="下载流式音频"><Download size={16} /></a></div>}
-              <div className="result-detail"><span>状态</span><code>{streamTest.message}</code><span>格式</span><code>{streamTest.format || "mp3"}</code><span>HTTP</span><code>{streamTest.statusCode}</code>{streamTest.nativeStreaming !== undefined && <><span>上游</span><code>{streamTest.nativeStreaming ? "原生分片" : "网关兼容分片"}</code></>}{streamTest.jobId && <><span>Job</span><code>{streamTest.jobId}</code></>}</div>
-            </>}
-          </div>
-        </div>
-        <div className="gateway-examples">
-          <div className="examples-head"><div><strong>当前请求示例</strong><div className="example-request-meta"><span>model <code>{payload.model || "未选择"}</code></span><span>voice <code>{payload.voice || "未选择"}</code></span></div></div><button className="inline-copy" onClick={() => copy(exampleTab, examples[exampleTab])} title="复制当前示例"><Copy size={14} /></button></div>
-          <div className="example-tabs">{[["powershell", "PowerShell"], ["curl", "curl"], ["python", "Python"], ["javascript", "JavaScript"], ["stream", "SSE 流式"]].map(([id, label]) => <button className={exampleTab === id ? "selected" : ""} onClick={() => setExampleTab(id)} key={id}>{label}</button>)}</div>
-          <pre>{examples[exampleTab]}</pre>
-        </div>
-      </div>}
+
+            {!stats && statsLoading ? (
+              <EmptyHint icon={<RefreshCw className="animate-spin" />}>正在读取网关统计...</EmptyHint>
+            ) : stats && stats.total_requests > 0 ? (
+              <>
+                <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-5">
+                  <StatCard label="请求" value={stats.total_requests} hint={`${stats.completed_requests} 成功 · ${stats.failed_requests} 失败`} />
+                  <StatCard label="成功率" value={`${stats.success_rate}%`} hint={`${stats.sample_count} 个已记录样本`} />
+                  <StatCard
+                    label="首片 P50 / P95"
+                    value={<>{formatLatency(stats.first_chunk_latency.p50)}{" "}<span className="text-muted-foreground">/</span>{" "}{formatLatency(stats.first_chunk_latency.p95)}</>}
+                    hint={`${stats.first_chunk_latency.samples} 个流式样本`}
+                  />
+                  <StatCard
+                    label="总耗时 P50 / P95"
+                    value={<>{formatLatency(stats.total_latency.p50)}{" "}<span className="text-muted-foreground">/</span>{" "}{formatLatency(stats.total_latency.p95)}</>}
+                    hint={`${stats.total_latency.samples} 个耗时样本`}
+                  />
+                  <StatCard label="取消" value={stats.cancelled_requests} hint="客户端主动中断" />
+                </div>
+                <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_260px]">
+                  <div className="min-w-0 overflow-hidden rounded-lg border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="hover:bg-transparent">
+                          <TableHead className="pl-4">维度</TableHead>
+                          <TableHead className="text-right">请求</TableHead>
+                          <TableHead className="text-right">成功率</TableHead>
+                          <TableHead className="hidden text-right sm:table-cell">首片 P95</TableHead>
+                          <TableHead className="pr-4 text-right">总耗时 P95</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody className="font-mono text-[13px] tabular-nums">
+                        {stats.by_provider.map((item) => (
+                          <StatsRow
+                            key={`provider-${item.name}`}
+                            name={statsProviderLabel(item.name)}
+                            detail="来源"
+                            emphasis
+                            item={item}
+                            formatLatency={formatLatency}
+                          />
+                        ))}
+                        {stats.by_model.slice(0, 8).map((item) => (
+                          <StatsRow
+                            key={`model-${item.name}`}
+                            name={item.name.split("/").pop() || item.name}
+                            detail={`${statsProviderLabel(item.name.split("/")[0])} · 模型`}
+                            item={item}
+                            formatLatency={formatLatency}
+                          />
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  <div className="flex flex-col gap-3 rounded-lg border p-4">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                      <Activity className="size-4 text-brand" />
+                      错误聚合
+                    </div>
+                    {stats.errors.length ? (
+                      <ul className="m-0 flex list-none flex-col gap-2 p-0">
+                        {stats.errors.slice(0, 6).map((item) => (
+                          <li key={item.code} className="flex items-center justify-between gap-3 text-xs">
+                            <code className="truncate font-mono text-destructive">{item.code}</code>
+                            <strong className="font-mono tabular-nums text-foreground">{item.count}</strong>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <span className="flex items-center gap-2 text-xs text-success">
+                        <Check className="size-4" />
+                        当前范围没有失败请求
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <EmptyHint icon={<Gauge />}>当前范围还没有网关语音请求。完成一次接口测试后会开始显示统计。</EmptyHint>
+            )}
+          </TabsContent>
+        </Tabs>
+      </div>
     </section>
   );
 }
 
+function IconAction({ label, onClick, disabled, children }: { label: string; onClick: () => void; disabled?: boolean; children: ReactNode }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button variant="ghost" size="icon-sm" aria-label={label} onClick={onClick} disabled={disabled}>
+          {children}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+function CopyField({ label, value, onCopy }: { label: string; value: string; onCopy?: () => void }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-1.5">
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="m-0 flex min-w-0 items-center gap-1 rounded-md bg-muted px-3 py-1.5">
+        <code translate="no" className="min-w-0 flex-1 truncate py-0.5 font-mono text-[13px] text-foreground" title={value}>{value}</code>
+        {onCopy && (
+          <IconAction label={`复制 ${label}`} onClick={onCopy}>
+            <Copy />
+          </IconAction>
+        )}
+      </dd>
+    </div>
+  );
+}
+
+function Fact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md bg-muted/60 px-3 py-2.5">
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="m-0 mt-0.5 text-sm font-semibold text-foreground">{value}</dd>
+    </div>
+  );
+}
+
+function ModelOptions({ groups }: { groups: Record<string, { gateway_id: string; display_name: string }[]> }) {
+  return (
+    <>
+      {Object.entries(groups).map(([provider, group]) => (
+        <SelectGroup key={provider}>
+          <SelectLabel>{provider}</SelectLabel>
+          {group.map((model) => (
+            <SelectItem value={model.gateway_id} key={model.gateway_id}>{model.display_name}</SelectItem>
+          ))}
+        </SelectGroup>
+      ))}
+    </>
+  );
+}
+
+function MethodBadge({ method }: { method: string }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex w-12 shrink-0 justify-center rounded-full py-0.5 font-mono text-[11px] font-semibold",
+        method === "GET" ? "bg-emerald-50 text-emerald-700" : "bg-sky-50 text-sky-700",
+      )}
+    >
+      {method}
+    </span>
+  );
+}
+
+function DocRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
+      <dd className="m-0 mt-0.5 leading-relaxed text-soft">{value}</dd>
+    </div>
+  );
+}
+
+function CodeBlock({ label, code, onCopy }: { label: string; code: string; onCopy: () => void }) {
+  return (
+    <div className="min-w-0 overflow-hidden rounded-lg border bg-slate-950 text-slate-100">
+      <div className="flex items-center justify-between gap-3 border-b border-white/10 py-1.5 pr-1.5 pl-4">
+        <span className="text-xs text-slate-400">{label}</span>
+        <Button variant="ghost" size="xs" onClick={onCopy} className="text-slate-300 hover:bg-white/10 hover:text-white">
+          <Copy />
+          复制
+        </Button>
+      </div>
+      <pre translate="no" className="m-0 max-h-80 overflow-auto p-4 font-mono text-xs leading-relaxed whitespace-pre">{code}</pre>
+    </div>
+  );
+}
+
+function IdHint({ label, value }: { label: string; value: string }) {
+  return (
+    <span className="flex min-w-0 items-center gap-1.5">
+      <span className="shrink-0">{label}</span>
+      <code className="truncate font-mono text-foreground">{value}</code>
+    </span>
+  );
+}
+
+function StatusBadge({ status, children }: { status: GatewayTestResult["status"]; children: ReactNode }) {
+  const tone = {
+    idle: "bg-muted text-muted-foreground",
+    running: "bg-accent text-accent-foreground",
+    success: "bg-emerald-50 text-emerald-700",
+    error: "bg-destructive/10 text-destructive",
+    cancelled: "bg-amber-50 text-amber-700",
+  }[status];
+  const dot = {
+    idle: "bg-slate-400",
+    running: "bg-brand animate-pulse",
+    success: "bg-emerald-500",
+    error: "bg-destructive",
+    cancelled: "bg-amber-500",
+  }[status];
+  return (
+    <Badge className={cn("rounded-full px-2.5 font-medium", tone)}>
+      <span className={cn("size-1.5 rounded-full", dot)} />
+      {children}
+    </Badge>
+  );
+}
+
+function EmptyHint({ icon, children }: { icon: ReactNode; children: ReactNode }) {
+  return (
+    <div className="flex flex-col items-center gap-2 rounded-lg px-4 py-8 text-center text-sm text-muted-foreground [&_svg]:size-5 [&_svg]:text-brand">
+      {icon}
+      <span>{children}</span>
+    </div>
+  );
+}
+
+function ErrorHint({ children }: { children: ReactNode }) {
+  return (
+    <p role="alert" className="m-0 flex items-start gap-2 rounded-md bg-destructive/10 px-3 py-2.5 text-sm break-words text-destructive">
+      <CircleHelp className="mt-0.5 size-4 shrink-0" />
+      <span className="min-w-0">{children}</span>
+    </p>
+  );
+}
+
+function MetricGrid({ items }: { items: [string, ReactNode][] }) {
+  return (
+    <dl className={cn("m-0 grid gap-2", items.length > 3 ? "grid-cols-2 sm:grid-cols-4 xl:grid-cols-2" : "grid-cols-3")}>
+      {items.map(([label, value]) => (
+        <div key={label} className="rounded-md bg-card px-3 py-2 ring-1 ring-border">
+          <dt className="text-[11px] text-muted-foreground">{label}</dt>
+          <dd className="m-0 font-mono text-sm font-semibold text-foreground tabular-nums">{value ?? "-"}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function DetailList({ items }: { items: readonly (readonly [string, ReactNode])[] }) {
+  return (
+    <dl className="m-0 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-xs">
+      {items.map(([label, value]) => (
+        <div key={label} className="contents">
+          <dt className="text-muted-foreground">{label}</dt>
+          <dd className="m-0 font-mono break-all text-foreground">{value ?? "-"}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function StatCard({ label, value, hint }: { label: string; value: ReactNode; hint: string }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-1 rounded-lg border bg-card px-4 py-3">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <strong className="font-mono text-lg leading-snug font-semibold text-foreground tabular-nums">{value}</strong>
+      <small className="truncate text-[11px] text-muted-foreground">{hint}</small>
+    </div>
+  );
+}
+
+type StatsEntry = GatewayStats["by_provider"][number];
+
+function StatsRow({
+  name,
+  detail,
+  item,
+  emphasis,
+  formatLatency,
+}: {
+  name: string;
+  detail: string;
+  item: StatsEntry;
+  emphasis?: boolean;
+  formatLatency: (value: number | null) => string;
+}) {
+  return (
+    <TableRow className={cn(emphasis && "bg-muted/40")}>
+      <TableCell className="w-full max-w-0 pl-4 font-sans">
+        <div className="truncate text-[13px] font-medium text-foreground">{name}</div>
+        <div className="text-[11px] text-muted-foreground">{detail}</div>
+      </TableCell>
+      <TableCell className="text-right">{item.requests}</TableCell>
+      <TableCell className="text-right">{item.success_rate}%</TableCell>
+      <TableCell className="hidden text-right sm:table-cell">{formatLatency(item.first_chunk_latency.p95)}</TableCell>
+      <TableCell className="pr-4 text-right">{formatLatency(item.total_latency.p95)}</TableCell>
+    </TableRow>
+  );
+}

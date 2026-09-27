@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ComponentProps, type ReactNode } from "react";
 import {
   Activity,
   Check,
@@ -16,12 +16,32 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogMedia,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
+import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useConfirm } from "@/components/feedback/ConfirmProvider";
+import { cn } from "@/lib/utils";
 import { api } from "../api";
-import { ProviderSelector } from "../components/ProviderSelector";
-import { WorkspaceHero } from "../components/WorkspaceHero";
-import { handleTabListKeyDown } from "../components/tabs";
+import { ProviderMark } from "../components/ProviderMark";
+import { Field, Note } from "../components/form/Field";
+import { PageHeader } from "../components/layout/PageHeader";
 import { useStudio } from "../context/StudioContext";
-import { useDialogAccessibility } from "../hooks/useDialogAccessibility";
 import type {
   CleanupPreview,
   CleanupRun,
@@ -35,29 +55,77 @@ import type {
 } from "../types";
 import { credentialProviderIds, formatBytes, providerMeta } from "../utils";
 
+type Section = "providers" | "storage" | "environment";
+
+const segmentItem = "h-8 flex-1 rounded-sm px-3 text-[13px] data-[state=on]:bg-card data-[state=on]:text-foreground data-[state=on]:shadow-sm";
+
 export function SettingsPage() {
   const { models, refreshJobs: onJobsChanged } = useStudio();
-  const [section, setSection] = useState<"providers" | "storage" | "environment">("providers");
+  const [section, setSection] = useState<Section>("providers");
   return (
-    <section className="page-section settings-shell">
-      <WorkspaceHero
-        title="把每个厂商"
-        accent="放进同一个工作台。"
-        description="统一管理厂商凭据、生成文件存储策略和本机运行环境。"
-      />
-      <div className="settings-navigation" role="tablist" aria-label="设置分类" onKeyDown={handleTabListKeyDown}>
-        <button id="settings-tab-providers" className={section === "providers" ? "selected" : ""} type="button" role="tab" aria-controls="settings-panel-providers" aria-selected={section === "providers"} tabIndex={section === "providers" ? 0 : -1} onClick={() => setSection("providers")}><KeyRound size={18} />厂商账号</button>
-        <button id="settings-tab-storage" className={section === "storage" ? "selected" : ""} type="button" role="tab" aria-controls="settings-panel-storage" aria-selected={section === "storage"} tabIndex={section === "storage" ? 0 : -1} onClick={() => setSection("storage")}><HardDrive size={18} />存储与清理</button>
-        <button id="settings-tab-environment" className={section === "environment" ? "selected" : ""} type="button" role="tab" aria-controls="settings-panel-environment" aria-selected={section === "environment"} tabIndex={section === "environment" ? 0 : -1} onClick={() => setSection("environment")}><ShieldCheck size={18} />运行环境</button>
-      </div>
-      {section === "providers" && <ProviderSettings models={models} panelId="settings-panel-providers" labelledBy="settings-tab-providers" />}
-      {section === "storage" && <StorageSettings onJobsChanged={onJobsChanged} panelId="settings-panel-storage" labelledBy="settings-tab-storage" />}
-      {section === "environment" && <EnvironmentSettings panelId="settings-panel-environment" labelledBy="settings-tab-environment" />}
+    <section>
+      <PageHeader title="设置" description="统一管理厂商凭据、生成文件存储策略和本机运行环境。" />
+      <Tabs value={section} onValueChange={(value) => setSection(value as Section)} className="gap-5">
+        <div className="-mx-1 overflow-x-auto px-1">
+          <TabsList aria-label="设置分类">
+            <TabsTrigger value="providers" className="px-4"><KeyRound />厂商账号</TabsTrigger>
+            <TabsTrigger value="storage" className="px-4"><HardDrive />存储与清理</TabsTrigger>
+            <TabsTrigger value="environment" className="px-4"><ShieldCheck />运行环境</TabsTrigger>
+          </TabsList>
+        </div>
+        <TabsContent value="providers"><ProviderSettings models={models} /></TabsContent>
+        <TabsContent value="storage"><StorageSettings onJobsChanged={onJobsChanged} /></TabsContent>
+        <TabsContent value="environment"><EnvironmentSettings /></TabsContent>
+      </Tabs>
     </section>
   );
 }
 
-function EnvironmentSettings({ panelId, labelledBy }: { panelId?: string; labelledBy?: string }) {
+function StateIcon({ status, className }: { status: "ok" | "warning" | "error"; className?: string }) {
+  const Icon = status === "ok" ? Check : status === "warning" ? CircleHelp : X;
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "grid shrink-0 place-items-center rounded-full",
+        status === "ok" && "bg-emerald-50 text-emerald-600",
+        status === "warning" && "bg-amber-50 text-amber-600",
+        status === "error" && "bg-destructive/10 text-destructive",
+        className,
+      )}
+    >
+      <Icon className="size-[55%]" />
+    </span>
+  );
+}
+
+function LoadingIsland({ children, action }: { children: ReactNode; action?: ReactNode }) {
+  return (
+    <div className="island flex flex-col items-center gap-3 px-6 py-16 text-center text-sm text-muted-foreground">
+      <RefreshCw className="size-5 animate-spin text-brand" />
+      <span>{children}</span>
+      {action}
+    </div>
+  );
+}
+
+function StatusLine({ children, tone = "info" }: { children: ReactNode; tone?: "info" | "error" }) {
+  return (
+    <p
+      role="status"
+      aria-live="polite"
+      className={cn(
+        "m-0 flex items-start gap-2 rounded-md px-3 py-2.5 text-sm",
+        tone === "error" ? "bg-destructive/10 text-destructive" : "bg-accent/60 text-accent-foreground",
+      )}
+    >
+      <Activity className="mt-0.5 size-4 shrink-0" />
+      <span className="min-w-0 break-words">{children}</span>
+    </p>
+  );
+}
+
+function EnvironmentSettings() {
   const [diagnostics, setDiagnostics] = useState<SystemDiagnostics | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
@@ -76,42 +144,65 @@ function EnvironmentSettings({ panelId, labelledBy }: { panelId?: string; labell
   useEffect(() => { void load(); }, []);
 
   if (loading && !diagnostics) {
-    return <div className="environment-loading"><RefreshCw size={18} className="spinning" />正在检查运行环境...</div>;
+    return <LoadingIsland>正在检查运行环境...</LoadingIsland>;
   }
   return (
-    <div id={panelId} className="environment-settings-page" role={panelId ? "tabpanel" : undefined} aria-labelledby={labelledBy} tabIndex={panelId ? 0 : undefined}>
-      <div className="environment-heading">
-        <div>
-          <h2>运行环境</h2>
-          <p>检查语音生成、音频转换和凭据保存所需的本机组件。</p>
-        </div>
-        <button className="secondary-button" type="button" onClick={() => void load()} disabled={loading}>
-          <RefreshCw size={16} className={loading ? "spinning" : ""} />重新检查
-        </button>
-      </div>
-      {diagnostics && <>
-        <div className={"environment-summary " + diagnostics.status}>
-          <span className="environment-summary-icon">
-            {diagnostics.status === "error" ? <X size={21} /> : diagnostics.status === "warning" ? <CircleHelp size={21} /> : <Check size={21} />}
-          </span>
-          <div>
-            <strong>{diagnostics.status === "error" ? `${diagnostics.required_failures} 项需要处理` : diagnostics.status === "warning" ? "核心环境可用" : "运行环境正常"}</strong>
-            <span>{diagnostics.base_url} · {diagnostics.platform} 本地服务</span>
+    <div className="flex flex-col gap-6">
+      <div className="island flex flex-col gap-5 p-6 md:p-7">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
+            <h2 className="m-0 text-base font-semibold text-foreground">运行环境</h2>
+            <p className="mt-1 mb-0 text-sm text-muted-foreground">检查语音生成、音频转换和凭据保存所需的本机组件。</p>
           </div>
+          <Button variant="outline" onClick={() => void load()} disabled={loading}>
+            <RefreshCw className={cn(loading && "animate-spin")} />
+            重新检查
+          </Button>
         </div>
-        <div className="environment-checks">
-          {diagnostics.checks.map((item) => (
-            <div className="environment-check-row" key={item.id}>
-              <span className={"environment-check-state " + item.status}>
-                {item.status === "ok" ? <Check size={16} /> : item.status === "warning" ? <CircleHelp size={16} /> : <X size={16} />}
-              </span>
-              <div className="environment-check-main"><strong>{item.label}</strong><span>{item.detail}</span></div>
-              <code>{item.version || (item.status === "warning" ? "可选" : "未通过")}</code>
+        {diagnostics && (
+          <div
+            className={cn(
+              "flex items-center gap-4 rounded-lg p-4",
+              diagnostics.status === "ok" && "bg-emerald-50/70",
+              diagnostics.status === "warning" && "bg-amber-50/70",
+              diagnostics.status === "error" && "bg-destructive/5",
+            )}
+          >
+            <StateIcon status={diagnostics.status} className="size-11" />
+            <div className="min-w-0">
+              <strong className="block text-[15px] font-semibold text-foreground">
+                {diagnostics.status === "error" ? `${diagnostics.required_failures} 项需要处理` : diagnostics.status === "warning" ? "核心环境可用" : "运行环境正常"}
+              </strong>
+              <span className="block truncate font-mono text-xs text-muted-foreground">{diagnostics.base_url} · {diagnostics.platform} 本地服务</span>
             </div>
+          </div>
+        )}
+        {message && <StatusLine tone="error">{message}</StatusLine>}
+      </div>
+      {diagnostics && (
+        <ul className="m-0 grid list-none gap-4 p-0 md:grid-cols-2 xl:grid-cols-3">
+          {diagnostics.checks.map((item) => (
+            <li key={item.id} className="island flex min-w-0 flex-col gap-3 p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <StateIcon status={item.status === "ok" ? "ok" : item.status === "warning" ? "warning" : "error"} className="size-8" />
+                  <strong className="truncate text-sm font-semibold text-foreground">{item.label}</strong>
+                </div>
+                <code
+                  className={cn(
+                    "max-w-[45%] shrink-0 truncate rounded-full px-2 py-0.5 font-mono text-[11px]",
+                    item.status === "ok" ? "bg-muted text-soft" : item.status === "warning" ? "bg-amber-50 text-amber-700" : "bg-destructive/10 text-destructive",
+                  )}
+                  title={item.version || undefined}
+                >
+                  {item.version || (item.status === "warning" ? "可选" : "未通过")}
+                </code>
+              </div>
+              <p className="m-0 text-xs leading-relaxed break-words text-muted-foreground">{item.detail}</p>
+            </li>
           ))}
-        </div>
-      </>}
-      {message && <div className="environment-message"><Activity size={15} />{message}</div>}
+        </ul>
+      )}
     </div>
   );
 }
@@ -136,7 +227,16 @@ function storageDraft(policy: StoragePolicy): StoragePolicyDraft {
   };
 }
 
-function StorageSettings({ onJobsChanged, panelId, labelledBy }: { onJobsChanged: () => Promise<void>; panelId?: string; labelledBy?: string }) {
+function NumberWithUnit({ id, unit, ...props }: ComponentProps<typeof Input> & { unit: string }) {
+  return (
+    <div className="relative">
+      <Input id={id} type="number" className="pr-12 font-mono tabular-nums" {...props} />
+      <span className="pointer-events-none absolute top-1/2 right-3.5 -translate-y-1/2 text-sm text-muted-foreground">{unit}</span>
+    </div>
+  );
+}
+
+function StorageSettings({ onJobsChanged }: { onJobsChanged: () => Promise<void> }) {
   const [status, setStatus] = useState<StorageStatus | null>(null);
   const [draft, setDraft] = useState<StoragePolicyDraft | null>(null);
   const [preview, setPreview] = useState<CleanupPreview | null>(null);
@@ -145,7 +245,6 @@ function StorageSettings({ onJobsChanged, panelId, labelledBy }: { onJobsChanged
   const closePreview = () => {
     if (working !== "cleanup") setPreview(null);
   };
-  const dialogRef = useDialogAccessibility<HTMLDivElement>(Boolean(preview), closePreview);
 
   const load = async () => {
     setWorking("loading");
@@ -187,7 +286,7 @@ function StorageSettings({ onJobsChanged, panelId, labelledBy }: { onJobsChanged
     });
     setStatus(next);
     setDraft(storageDraft(next.policy));
-    if (showMessage) setMessage("存储策略已保存");
+    if (showMessage) toast.success("存储策略已保存");
     return next;
   };
 
@@ -223,7 +322,7 @@ function StorageSettings({ onJobsChanged, panelId, labelledBy }: { onJobsChanged
       setStatus(response.storage);
       setDraft(storageDraft(response.storage.policy));
       setPreview(null);
-      setMessage(response.result.files_removed || response.result.jobs_removed
+      toast.success(response.result.files_removed || response.result.jobs_removed
         ? `${response.result.message}，释放 ${formatBytes(response.result.bytes_freed)}`
         : response.result.message);
       await onJobsChanged();
@@ -238,7 +337,8 @@ function StorageSettings({ onJobsChanged, panelId, labelledBy }: { onJobsChanged
     setWorking("directory");
     try {
       const result = await api<{ opened: boolean; path: string; message?: string }>("/api/storage/open-directory", { method: "POST" });
-      setMessage(result.opened ? "已打开音频存储目录" : `${result.message || "请手动打开音频存储目录"} 路径：${result.path}`);
+      if (result.opened) toast.success("已打开音频存储目录");
+      else setMessage(`${result.message || "请手动打开音频存储目录"} 路径：${result.path}`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "无法打开存储目录");
     } finally {
@@ -247,81 +347,229 @@ function StorageSettings({ onJobsChanged, panelId, labelledBy }: { onJobsChanged
   };
 
   if (!status || !draft) {
-    return <div className="storage-loading"><RefreshCw className={working === "loading" ? "spinning" : ""} size={20} /><span>{message || "正在读取存储状态..."}</span>{message && <button className="secondary-button" type="button" onClick={() => void load()}>重试</button>}</div>;
+    return (
+      <LoadingIsland action={message ? <Button variant="outline" size="sm" onClick={() => void load()}>重试</Button> : undefined}>
+        {message || "正在读取存储状态..."}
+      </LoadingIsland>
+    );
   }
 
   const usagePercent = Math.min(100, Math.max(0, status.usage.capacity_ratio * 100));
   const latest = status.cleanup_history[0];
+  const destructiveScope = draft.cleanup_scope === "jobs";
   return (
-    <div id={panelId} className="storage-settings-page" role={panelId ? "tabpanel" : undefined} aria-labelledby={labelledBy} tabIndex={panelId ? 0 : undefined}>
-      <header className="storage-heading">
-        <div><h2>生成文件存储</h2><p>控制任务音频的保留时间和磁盘占用。音色库、API 凭据与语音克隆素材不会被自动清理。</p></div>
-        <button className="secondary-button" type="button" onClick={() => void openDirectory()} disabled={Boolean(working)}><FolderOpen size={17} />打开目录</button>
-      </header>
-
-      <section className="storage-overview" aria-label="存储空间概览">
-        <div className="storage-usage-head">
-          <div className="storage-usage-title"><HardDrive size={22} /><span>当前占用</span></div>
-          <strong>{formatBytes(status.usage.audio_bytes)} <span>/ {formatBytes(status.policy.capacity_limit_bytes)}</span></strong>
-        </div>
-        <div className="storage-progress" aria-label={`已使用 ${usagePercent.toFixed(0)}%`}><span style={{ width: `${usagePercent}%` }} /></div>
-        <div className="storage-stats">
-          <div><strong>{status.usage.audio_count}</strong><span>个音频</span></div>
-          <div><strong>{status.usage.job_count}</strong><span>条任务记录</span></div>
-          <div><strong>{status.usage.oldest_audio_at ? new Date(status.usage.oldest_audio_at).toLocaleDateString() : "--"}</strong><span>最早音频</span></div>
-        </div>
-      </section>
-
-      <section className="storage-policy-section">
-        <div className="storage-policy-row storage-policy-master">
-          <div><strong>自动清理</strong><span>{draft.automatic_enabled ? (status.cleanup_history.some((run) => run.trigger === "automatic") && status.next_cleanup_at ? `下次检查 ${new Date(status.next_cleanup_at).toLocaleString()}` : "等待首次自动检查") : "关闭后仍可使用立即清理"}</span></div>
-          <button className={draft.automatic_enabled ? "toggle-switch active" : "toggle-switch"} type="button" role="switch" aria-checked={draft.automatic_enabled} onClick={() => setDraft({ ...draft, automatic_enabled: !draft.automatic_enabled })}><span /></button>
-        </div>
-
-        <div className="storage-policy-grid">
-          <div className="storage-setting-block">
-            <label htmlFor="retention-days">自动保留天数</label>
-            <div className="number-with-unit"><input id="retention-days" type="number" min="1" max="3650" value={draft.retention_days} onChange={(event) => setDraft({ ...draft, retention_days: Number(event.target.value) })} /><span>天</span></div>
-            <p>超过保留时间的音频会进入清理范围。</p>
+    <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(300px,360px)]">
+      <div className="flex min-w-0 flex-col gap-6">
+        <section aria-labelledby="storage-policy-title" className="island flex flex-col gap-6 p-6 md:p-7">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="min-w-0">
+              <h2 id="storage-policy-title" className="m-0 text-base font-semibold text-foreground">生成文件存储</h2>
+              <p className="mt-1 mb-0 max-w-xl text-sm leading-relaxed text-muted-foreground">控制任务音频的保留时间和磁盘占用。音色库、API 凭据与语音克隆素材不会被自动清理。</p>
+            </div>
+            <Button variant="outline" onClick={() => void openDirectory()} disabled={Boolean(working)}>
+              <FolderOpen />
+              打开目录
+            </Button>
           </div>
-          <div className="storage-setting-block">
-            <label htmlFor="capacity-limit">容量上限</label>
-            <div className="number-with-unit"><input id="capacity-limit" type="number" min="0.1" max="10240" step="0.1" value={draft.capacity_gb} onChange={(event) => setDraft({ ...draft, capacity_gb: Number(event.target.value) })} /><span>GB</span></div>
-            <p>超出上限后优先清理最旧的音频。</p>
-          </div>
-          <div className="storage-setting-block">
-            <label>检查频率</label>
-            <div className="storage-segmented"><button className={draft.interval === "daily" ? "selected" : ""} type="button" onClick={() => setDraft({ ...draft, interval: "daily" })}>每天</button><button className={draft.interval === "weekly" ? "selected" : ""} type="button" onClick={() => setDraft({ ...draft, interval: "weekly" })}>每周</button></div>
-            <p>程序启动时也会检查是否到期。</p>
-          </div>
-          <div className="storage-setting-block">
-            <label>清理范围</label>
-            <div className="storage-segmented storage-scope"><button className={draft.cleanup_scope === "audio_only" ? "selected" : ""} type="button" onClick={() => setDraft({ ...draft, cleanup_scope: "audio_only" })}>只清理音频</button><button className={draft.cleanup_scope === "jobs" ? "selected danger" : ""} type="button" onClick={() => setDraft({ ...draft, cleanup_scope: "jobs" })}>音频和任务记录</button></div>
-            <p>{draft.cleanup_scope === "audio_only" ? "文字和生成参数会继续保留。" : "到期任务将从任务历史中永久删除。"}</p>
-          </div>
-        </div>
-      </section>
 
-      {draft.cleanup_scope === "jobs" && <div className="storage-danger-note"><ShieldCheck size={18} /><span>当前策略会永久删除任务记录。建议先使用批量导出备份重要内容。</span></div>}
-      {message && <div className="form-message storage-message" role="status" aria-live="polite"><Activity size={15} />{message}</div>}
+          <div className="flex items-center justify-between gap-4 rounded-lg border bg-muted/30 p-4">
+            <div className="min-w-0">
+              <label htmlFor="storage-auto" className="block text-sm font-semibold text-foreground">自动清理</label>
+              <span className="mt-0.5 block text-xs text-muted-foreground">
+                {draft.automatic_enabled
+                  ? (status.cleanup_history.some((run) => run.trigger === "automatic") && status.next_cleanup_at ? `下次检查 ${new Date(status.next_cleanup_at).toLocaleString()}` : "等待首次自动检查")
+                  : "关闭后仍可使用立即清理"}
+              </span>
+            </div>
+            <Switch
+              id="storage-auto"
+              checked={draft.automatic_enabled}
+              onCheckedChange={(checked) => setDraft({ ...draft, automatic_enabled: checked })}
+            />
+          </div>
 
-      <div className="storage-actions">
-        <div>{latest ? <>最近清理：{new Date(latest.completed_at).toLocaleString()} · 释放 {formatBytes(latest.bytes_freed)}</> : "尚未执行过清理"}</div>
-        <button className="secondary-button" type="button" onClick={() => void showCleanupPreview()} disabled={Boolean(working)}><Trash2 size={17} />{working === "preview" ? "正在计算..." : "立即清理"}</button>
-        <button className="primary-button compact" type="button" onClick={() => void save()} disabled={Boolean(working) || !dirty}><Save size={17} />{working === "saving" ? "保存中..." : "保存设置"}</button>
+          <div className="grid gap-5 md:grid-cols-2">
+            <Field label="自动保留天数" htmlFor="retention-days" hint="超过保留时间的音频会进入清理范围。">
+              <NumberWithUnit
+                id="retention-days"
+                unit="天"
+                min="1"
+                max="3650"
+                value={draft.retention_days}
+                onChange={(event) => setDraft({ ...draft, retention_days: Number(event.target.value) })}
+              />
+            </Field>
+            <Field label="容量上限" htmlFor="capacity-limit" hint="超出上限后优先清理最旧的音频。">
+              <NumberWithUnit
+                id="capacity-limit"
+                unit="GB"
+                min="0.1"
+                max="10240"
+                step="0.1"
+                value={draft.capacity_gb}
+                onChange={(event) => setDraft({ ...draft, capacity_gb: Number(event.target.value) })}
+              />
+            </Field>
+            <Field label="检查频率" hint="程序启动时也会检查是否到期。">
+              <ToggleGroup
+                type="single"
+                value={draft.interval}
+                onValueChange={(value) => value && setDraft({ ...draft, interval: value as StoragePolicyDraft["interval"] })}
+                aria-label="检查频率"
+                className="w-full rounded-md bg-muted p-1"
+              >
+                <ToggleGroupItem value="daily" className={segmentItem}>每天</ToggleGroupItem>
+                <ToggleGroupItem value="weekly" className={segmentItem}>每周</ToggleGroupItem>
+              </ToggleGroup>
+            </Field>
+            <Field
+              label="清理范围"
+              hint={<span className={cn(destructiveScope && "text-destructive")}>{destructiveScope ? "到期任务将从任务历史中永久删除。" : "文字和生成参数会继续保留。"}</span>}
+            >
+              <ToggleGroup
+                type="single"
+                value={draft.cleanup_scope}
+                onValueChange={(value) => value && setDraft({ ...draft, cleanup_scope: value as StoragePolicyDraft["cleanup_scope"] })}
+                aria-label="清理范围"
+                className="w-full rounded-md bg-muted p-1"
+              >
+                <ToggleGroupItem value="audio_only" className={segmentItem}>只清理音频</ToggleGroupItem>
+                <ToggleGroupItem value="jobs" className={cn(segmentItem, "data-[state=on]:text-destructive")}>音频和任务记录</ToggleGroupItem>
+              </ToggleGroup>
+            </Field>
+          </div>
+
+          {destructiveScope && (
+            <Note icon={<ShieldCheck />} className="bg-destructive/10 text-destructive">
+              当前策略会永久删除任务记录。建议先使用批量导出备份重要内容。
+            </Note>
+          )}
+          {message && <StatusLine tone="error">{message}</StatusLine>}
+
+          <div className="flex flex-col gap-3 border-t pt-5 sm:flex-row sm:items-center">
+            <span className="min-w-0 flex-1 text-xs text-muted-foreground">
+              {latest ? <>最近清理：{new Date(latest.completed_at).toLocaleString()} · 释放 {formatBytes(latest.bytes_freed)}</> : "尚未执行过清理"}
+            </span>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => void showCleanupPreview()} disabled={Boolean(working)}>
+                <Trash2 />
+                {working === "preview" ? "正在计算..." : "立即清理"}
+              </Button>
+              <Button onClick={() => void save()} disabled={Boolean(working) || !dirty}>
+                <Save />
+                {working === "saving" ? "保存中..." : "保存设置"}
+              </Button>
+            </div>
+          </div>
+        </section>
       </div>
 
-      <section className="cleanup-history-section">
-        <div className="cleanup-history-heading"><h3>清理记录</h3><button className="icon-button" type="button" onClick={() => void load()} disabled={Boolean(working)} title="刷新存储状态" aria-label="刷新存储状态"><RefreshCw size={17} /></button></div>
-        {status.cleanup_history.length ? <div className="cleanup-history-list">{status.cleanup_history.map((run) => <div className="cleanup-history-row" key={run.id}><span>{new Date(run.completed_at).toLocaleString()}</span><strong>{run.trigger === "automatic" ? "自动清理" : "手动清理"}</strong><span>{run.files_removed} 个音频</span><span>{formatBytes(run.bytes_freed)}</span><span className={run.status === "completed" ? "cleanup-success" : "cleanup-partial"}>{run.status === "completed" ? "完成" : "部分失败"}</span></div>)}</div> : <div className="cleanup-history-empty">清理执行后，结果会记录在这里。</div>}
-      </section>
+      <aside className="flex min-w-0 flex-col gap-6">
+        <section aria-label="存储空间概览" className="island flex flex-col gap-4 p-6">
+          <div className="flex items-center gap-2 text-sm font-medium text-soft">
+            <HardDrive className="size-4 text-brand" />
+            当前占用
+          </div>
+          <div className="flex items-baseline gap-1.5">
+            <strong className="font-mono text-2xl font-semibold text-foreground tabular-nums">{formatBytes(status.usage.audio_bytes)}</strong>
+            <span className="text-sm text-muted-foreground">/ {formatBytes(status.policy.capacity_limit_bytes)}</span>
+          </div>
+          <Progress value={usagePercent} aria-label={`已使用 ${usagePercent.toFixed(0)}%`} className={cn(usagePercent >= 90 && "[&>[data-slot=progress-indicator]]:bg-destructive")} />
+          <dl className="m-0 grid grid-cols-3 gap-2 text-center">
+            <UsageStat label="个音频" value={status.usage.audio_count} />
+            <UsageStat label="条任务记录" value={status.usage.job_count} />
+            <UsageStat label="最早音频" value={status.usage.oldest_audio_at ? new Date(status.usage.oldest_audio_at).toLocaleDateString() : "--"} />
+          </dl>
+        </section>
 
-      {preview && <div className="storage-modal-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target) closePreview(); }}><div ref={dialogRef} className="storage-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="cleanup-confirm-title" tabIndex={-1}><div className="storage-confirm-icon"><Trash2 size={22} /></div><h3 id="cleanup-confirm-title">确认本次清理</h3><div className="storage-preview-metrics"><div><span>音频文件</span><strong>{preview.file_count} 个</strong></div><div><span>预计释放</span><strong>{formatBytes(preview.bytes_to_free)}</strong></div><div><span>{preview.cleanup_scope === "jobs" ? "删除记录" : "保留记录"}</span><strong>{preview.cleanup_scope === "jobs" ? `${preview.job_count} 条` : `${preview.jobs_preserved} 条`}</strong></div></div><p>{preview.file_count || preview.job_count ? (preview.cleanup_scope === "jobs" ? "音频和对应任务记录将永久删除，此操作无法撤销。" : "音频清理后无法恢复，文字记录和生成参数会继续保留。") : "当前没有符合存储策略的文件。"}</p><div className="storage-confirm-actions"><button className="secondary-button" type="button" onClick={closePreview} disabled={working === "cleanup"}>取消</button><button className={preview.cleanup_scope === "jobs" ? "danger-button" : "primary-button compact"} type="button" onClick={() => void cleanNow()} disabled={working === "cleanup" || (!preview.file_count && !preview.job_count)}>{working === "cleanup" ? "正在清理..." : "确认清理"}</button></div></div></div>}
+        <section aria-labelledby="cleanup-history-title" className="island flex flex-col gap-3 p-6">
+          <div className="flex items-center justify-between gap-3">
+            <h3 id="cleanup-history-title" className="m-0 text-sm font-semibold text-foreground">清理记录</h3>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon-sm" onClick={() => void load()} disabled={Boolean(working)} aria-label="刷新存储状态">
+                  <RefreshCw className={cn(working === "loading" && "animate-spin")} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>刷新存储状态</TooltipContent>
+            </Tooltip>
+          </div>
+          {status.cleanup_history.length ? (
+            <ul className="m-0 flex list-none flex-col divide-y p-0">
+              {status.cleanup_history.map((run) => (
+                <li key={run.id} className="flex items-center gap-3 py-2.5 text-xs">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium text-foreground">{run.trigger === "automatic" ? "自动清理" : "手动清理"}</div>
+                    <div className="truncate text-muted-foreground">{new Date(run.completed_at).toLocaleString()}</div>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <div className="font-mono text-foreground tabular-nums">{formatBytes(run.bytes_freed)}</div>
+                    <div className="text-muted-foreground">{run.files_removed} 个音频</div>
+                  </div>
+                  <Badge className={cn("shrink-0 rounded-full px-2 text-[11px]", run.status === "completed" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700")}>
+                    {run.status === "completed" ? "完成" : "部分失败"}
+                  </Badge>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="m-0 py-4 text-center text-xs text-muted-foreground">清理执行后，结果会记录在这里。</p>
+          )}
+        </section>
+      </aside>
+
+      <AlertDialog open={Boolean(preview)} onOpenChange={(open) => !open && closePreview()}>
+        <AlertDialogContent onEscapeKeyDown={(event) => working === "cleanup" && event.preventDefault()}>
+          {preview && (
+            <>
+              <AlertDialogHeader>
+                <AlertDialogMedia className={cn("size-12 rounded-full", preview.cleanup_scope === "jobs" ? "bg-destructive/10 text-destructive" : "bg-accent text-brand")}>
+                  <Trash2 className="size-5" />
+                </AlertDialogMedia>
+                <AlertDialogTitle>确认本次清理</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {preview.file_count || preview.job_count
+                    ? (preview.cleanup_scope === "jobs" ? "音频和对应任务记录将永久删除，此操作无法撤销。" : "音频清理后无法恢复，文字记录和生成参数会继续保留。")
+                    : "当前没有符合存储策略的文件。"}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <dl className="m-0 grid grid-cols-3 gap-2">
+                <UsageStat label="音频文件" value={`${preview.file_count} 个`} />
+                <UsageStat label="预计释放" value={formatBytes(preview.bytes_to_free)} />
+                <UsageStat
+                  label={preview.cleanup_scope === "jobs" ? "删除记录" : "保留记录"}
+                  value={preview.cleanup_scope === "jobs" ? `${preview.job_count} 条` : `${preview.jobs_preserved} 条`}
+                />
+              </dl>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={working === "cleanup"}>取消</AlertDialogCancel>
+                <Button
+                  variant={preview.cleanup_scope === "jobs" ? "destructive" : "default"}
+                  onClick={() => void cleanNow()}
+                  disabled={working === "cleanup" || (!preview.file_count && !preview.job_count)}
+                >
+                  {working === "cleanup" ? "正在清理..." : "确认清理"}
+                </Button>
+              </AlertDialogFooter>
+            </>
+          )}
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
 
-function ProviderSettings({ models, panelId, labelledBy }: { models: Model[]; panelId?: string; labelledBy?: string }) {
+function UsageStat({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="flex min-w-0 flex-col-reverse gap-0.5 rounded-md bg-muted/60 px-2 py-2.5 text-center">
+      <dt className="truncate text-[11px] text-muted-foreground">{label}</dt>
+      <dd className="m-0 truncate font-mono text-sm font-semibold text-foreground tabular-nums">{value}</dd>
+    </div>
+  );
+}
+
+function ProviderSettings({ models }: { models: Model[] }) {
+  const confirm = useConfirm();
   const [specs, setSpecs] = useState<Record<string, ProviderSpec>>({});
   const [accounts, setAccounts] = useState<ProviderAccount[]>([]);
   const [provider, setProvider] = useState("dashscope");
@@ -432,7 +680,7 @@ function ProviderSettings({ models, panelId, labelledBy }: { models: Model[]; pa
       await loadAccounts();
       setEditingId(saved.id);
       setForm((current) => ({ ...current, api_key: "" }));
-      setMessage("凭据已写入系统密钥环");
+      toast.success("凭据已写入系统密钥环");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "保存失败");
     } finally {
@@ -493,7 +741,7 @@ function ProviderSettings({ models, panelId, labelledBy }: { models: Model[]; pa
       setProjects((current) => [...current, created].sort((a, b) => a.display_name.localeCompare(b.display_name)));
       setProjectInput("");
       setShowProjectAdd(false);
-      setMessage("项目已添加。");
+      toast.success("项目已添加");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "添加项目失败");
     } finally {
@@ -501,12 +749,13 @@ function ProviderSettings({ models, panelId, labelledBy }: { models: Model[]; pa
     }
   };
   const removeProject = async (project: ProviderProject) => {
-    if (!editingId || !window.confirm(`删除项目“${project.display_name}”？`)) return;
+    if (!editingId) return;
+    if (!(await confirm({ title: `删除项目“${project.display_name}”？`, description: "只会从 Voice Hub 中移除该项目记录。", confirmLabel: "删除", destructive: true }))) return;
     setProjectsWorking(true);
     try {
       await api(`/api/provider-accounts/${encodeURIComponent(editingId)}/projects/${encodeURIComponent(project.id)}`, { method: "DELETE" });
       setProjects((current) => current.filter((item) => item.id !== project.id));
-      setMessage("项目已删除。");
+      toast.success("项目已删除");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "删除项目失败");
     } finally {
@@ -517,22 +766,20 @@ function ProviderSettings({ models, panelId, labelledBy }: { models: Model[]; pa
     try {
       await navigator.clipboard.writeText(projectName);
       setCopiedProject(projectName);
+      toast.success("已复制 ProjectName", { description: projectName });
       window.setTimeout(() => setCopiedProject(""), 1600);
     } catch {
       setMessage("ProjectName 复制失败");
     }
   };
   const remove = async () => {
-    if (
-      !editingId ||
-      !window.confirm("删除这个账号及其系统密钥环中的凭据？")
-    )
-      return;
+    if (!editingId) return;
+    if (!(await confirm({ title: "删除这个账号？", description: "账号及其保存在系统密钥环中的凭据会一并删除。", confirmLabel: "删除", destructive: true }))) return;
     setWorking(true);
     try {
       await api("/api/provider-accounts/" + editingId, { method: "DELETE" });
       await loadAccounts();
-      setMessage("账号与本机凭据已删除");
+      toast.success("账号与本机凭据已删除");
     } catch {
       setMessage("删除失败");
     } finally {
@@ -543,218 +790,225 @@ function ProviderSettings({ models, panelId, labelledBy }: { models: Model[]; pa
     (item) => item.provider === provider,
   );
   const current = accounts.find((item) => item.id === editingId);
+  const verifyLabel = provider === "dashscope" || provider === "mimo" || provider === "volcengine" || provider === "minimax"
+    ? "验证鉴权"
+    : "检查保存";
+  const statusTone = current?.status === "active"
+    ? "bg-emerald-50 text-emerald-700"
+    : current?.status === "error"
+      ? "bg-destructive/10 text-destructive"
+      : current
+        ? "bg-accent text-accent-foreground"
+        : "bg-muted text-muted-foreground";
+  const messageIsError = /失败|无法|请填写/.test(message);
 
   return (
-    <div id={panelId} className="settings-page" role={panelId ? "tabpanel" : undefined} aria-labelledby={labelledBy} tabIndex={panelId ? 0 : undefined}>
-      <div>
-        <h2>厂商账号与 API 凭据</h2>
-        <p className="settings-lead">
-          API Key 直接写入系统密钥环。页面和 SQLite
-          只保存脱敏后缀与 Endpoint，不会回显完整密钥。
-        </p>
-      </div>
-      <div className="credential-layout">
-        <div className="provider-rail">
-          <ProviderSelector
-            className="settings-provider-selector"
-            label="厂商账号"
-            value={provider}
-            onChange={setProvider}
-            options={credentialProviderIds.map((id) => {
-              const count = accounts.filter((item) => item.provider === id).length;
-              const active = accounts.some((item) => item.provider === id && item.status === "active");
-              return {
-                id,
-                label: providerMeta[id].label,
-                mark: providerMeta[id].mark,
-                tone: providerMeta[id].tone,
-                detail: `${models.filter((item) => item.provider === id).length} 个模型 · ${count ? `${count} 个账号` : "未配置"}`,
-                indicator: active ? "active" as const : count ? "saved" as const : "idle" as const,
-              };
-            })}
-          />
-          <div className="security-note">
-            <ShieldCheck size={16} />
-            <span>
-              密钥由当前系统用户的密钥环加密保存，其他系统账号无法直接读取。
-            </span>
+    <div className="grid items-start gap-6 lg:grid-cols-[minmax(240px,300px)_minmax(0,1fr)]">
+      <aside className="flex min-w-0 flex-col gap-4">
+        <div className="island flex flex-col gap-1 p-2" role="group" aria-label="厂商账号">
+          {credentialProviderIds.map((id) => {
+            const count = accounts.filter((item) => item.provider === id).length;
+            const active = accounts.some((item) => item.provider === id && item.status === "active");
+            const selected = provider === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                aria-pressed={selected}
+                onClick={() => setProvider(id)}
+                className={cn(
+                  "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/50",
+                  selected ? "bg-accent" : "hover:bg-muted/70",
+                )}
+              >
+                <ProviderMark provider={id} className="size-9 rounded-md text-sm" />
+                <span className="min-w-0 flex-1">
+                  <span className={cn("block truncate text-sm font-medium", selected ? "text-accent-foreground" : "text-foreground")}>{providerMeta[id].label}</span>
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {models.filter((item) => item.provider === id).length} 个模型 · {count ? `${count} 个账号` : "未配置"}
+                  </span>
+                </span>
+                <span
+                  aria-label={active ? "已鉴权" : count ? "已保存" : "未配置"}
+                  className={cn("size-2 shrink-0 rounded-full", active ? "bg-emerald-500" : count ? "bg-brand" : "bg-slate-300")}
+                />
+              </button>
+            );
+          })}
+        </div>
+        <Note icon={<ShieldCheck />}>
+          API Key 直接写入系统密钥环，由当前系统用户加密保存。页面和 SQLite 只保存脱敏后缀与 Endpoint，不会回显完整密钥。
+        </Note>
+      </aside>
+
+      <section aria-labelledby="credential-title" className="island flex min-w-0 flex-col gap-6 p-6 md:p-7">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <ProviderMark provider={provider} className="size-10 rounded-md text-sm" />
+            <h2 id="credential-title" className="m-0 truncate text-lg font-semibold text-foreground">{spec?.display_name || provider}</h2>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge className={cn("rounded-full px-2.5 font-medium", statusTone)}>
+              {current ? (current.status === "active" ? "已鉴权" : current.status === "error" ? "检查失败" : "已保存") : "尚未配置"}
+            </Badge>
+            {current && <code className="rounded-full bg-muted px-2.5 py-0.5 font-mono text-xs text-soft">{current.secret_hint}</code>}
           </div>
         </div>
-        <div className="credential-editor">
-          <div className="editor-title">
-            <div>
-              <h3>{spec?.display_name || provider}</h3>
-            </div>
-            <div className="credential-status">
-              {current ? (
-                <>
-                  <span className={"status-chip " + current.status}>
-                    {current.status === "active"
-                      ? "已鉴权"
-                      : current.status === "error"
-                        ? "检查失败"
-                        : "已保存"}
-                  </span>
-                  <code>{current.secret_hint}</code>
-                </>
-              ) : (
-                <span className="status-chip empty">尚未配置</span>
-              )}
-            </div>
-          </div>
-          {providerAccounts.length > 0 && (
-            <div className="account-switcher">
-              {providerAccounts.map((account) => (
-                <button
-                  className={editingId === account.id ? "selected" : ""}
-                  onClick={() => chooseAccount(account)}
-                  key={account.id}
-                >
-                  {account.display_name}
-                </button>
-              ))}
-              <button
-                className={!editingId ? "selected add" : "add"}
-                onClick={() => chooseAccount()}
+
+        {providerAccounts.length > 0 && (
+          <div className="flex flex-wrap gap-2" role="group" aria-label="选择账号">
+            {providerAccounts.map((account) => (
+              <Button
+                key={account.id}
+                variant={editingId === account.id ? "secondary" : "outline"}
+                size="sm"
+                aria-pressed={editingId === account.id}
+                className={cn("rounded-full", editingId === account.id && "bg-accent text-accent-foreground hover:bg-accent")}
+                onClick={() => chooseAccount(account)}
               >
-                <Plus size={13} />
-                新账号
-              </button>
-            </div>
-          )}
-          <div className="credential-form">
-            <div className="field full">
-              <label>配置名称</label>
-              <input
+                {account.display_name}
+              </Button>
+            ))}
+            <Button
+              variant={!editingId ? "secondary" : "ghost"}
+              size="sm"
+              aria-pressed={!editingId}
+              className={cn("rounded-full", !editingId && "bg-accent text-accent-foreground hover:bg-accent")}
+              onClick={() => chooseAccount()}
+            >
+              <Plus />
+              新账号
+            </Button>
+          </div>
+        )}
+
+        <form
+          className="flex flex-col gap-5"
+          autoComplete="off"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void save();
+          }}
+        >
+          <div className="grid gap-5 md:grid-cols-2">
+            <Field label="配置名称" htmlFor="credential-name">
+              <Input
+                id="credential-name"
                 value={form.display_name}
-                onChange={(event) =>
-                  setForm({ ...form, display_name: event.target.value })
-                }
+                onChange={(event) => setForm({ ...form, display_name: event.target.value })}
                 placeholder="例如：个人账号"
               />
-            </div>
-            <div className="field full">
-              <label>Endpoint</label>
-              <input
+            </Field>
+            <Field label="Endpoint" htmlFor="credential-endpoint" hint={`${spec?.endpoint_note || "厂商默认地址"}，通常无需修改。`}>
+              <Input
+                id="credential-endpoint"
                 value={form.endpoint}
-                onChange={(event) =>
-                  setForm({ ...form, endpoint: event.target.value })
-                }
+                onChange={(event) => setForm({ ...form, endpoint: event.target.value })}
                 placeholder={spec?.default_endpoint}
+                className="font-mono text-[13px]"
               />
-              <small>{spec?.endpoint_note}，通常无需修改。</small>
-            </div>
-            <div className="field full">
-              <label>{spec?.secret_label || "API Key"}</label>
-              <div className="secret-input">
-                <input
-                  type={showKey ? "text" : "password"}
-                  value={form.api_key}
-                  onChange={(event) =>
-                    setForm({ ...form, api_key: event.target.value })
-                  }
-                  autoComplete="new-password"
-                  placeholder={
-                    current
-                      ? "留空则继续使用 " + current.secret_hint
-                      : "粘贴后将直接写入系统密钥环"
-                  }
-                />
-                <button
-                  onClick={() => setShowKey(!showKey)}
-                  title={showKey ? "隐藏密钥" : "显示密钥"}
-                >
-                  {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-              </div>
-              {provider === "dashscope" && (
-                <small>
-                  语音模型需要标准 sk- Key；sk-sp- Token Plan Key 不支持 TTS。
-                </small>
-              )}
-            </div>
-            {provider === "volcengine" && (
-              <>
-                <div className="field full">
-                  <label>OpenAPI Access Key ID（IAM AK）</label>
-                  <input
+            </Field>
+          </div>
+          <Field
+            label={spec?.secret_label || "API Key"}
+            htmlFor="credential-secret"
+            hint={provider === "dashscope" ? "语音模型需要标准 sk- Key；sk-sp- Token Plan Key 不支持 TTS。" : undefined}
+          >
+            <SecretInput
+              id="credential-secret"
+              visible={showKey}
+              onToggle={() => setShowKey(!showKey)}
+              value={form.api_key}
+              onChange={(event) => setForm({ ...form, api_key: event.target.value })}
+              autoComplete="new-password"
+              placeholder={current ? "留空则继续使用 " + current.secret_hint : "粘贴后将直接写入系统密钥环"}
+            />
+          </Field>
+
+          {provider === "volcengine" && (
+            <>
+              <div className="grid gap-5 md:grid-cols-2">
+                <Field label="OpenAPI Access Key ID（IAM AK）" htmlFor="credential-ak">
+                  <Input
+                    id="credential-ak"
                     value={form.openapi_access_key}
                     onChange={(event) => setForm({ ...form, openapi_access_key: event.target.value })}
                     placeholder={current?.openapi_access_key_hint ? "留空则继续使用 " + current.openapi_access_key_hint : "填写 IAM 中生成的 Access Key ID，不是 Access Token"}
                     autoComplete="off"
+                    className="font-mono text-[13px]"
                   />
-                </div>
-                <div className="field full">
-                  <label>OpenAPI Secret Access Key（IAM SK）</label>
-                  <div className="secret-input">
-                    <input
-                      type={showKey ? "text" : "password"}
-                      value={form.openapi_secret_key}
-                      onChange={(event) => setForm({ ...form, openapi_secret_key: event.target.value })}
-                      placeholder={current?.has_openapi_secret ? "留空则继续使用已保存的 Secret" : "填写 IAM 中生成的 Secret Access Key"}
-                      autoComplete="new-password"
-                    />
-                  </div>
-                </div>
-                <section className="provider-projects-field" aria-labelledby="provider-projects-title">
-                  <div className="provider-projects-head">
-                    <div className="provider-projects-heading">
-                      <div>
-                        <h4 id="provider-projects-title">项目管理</h4>
-                        <p>声音克隆、音色同步和空槽位都会按所选项目查询。</p>
-                      </div>
-                      <span>{projects.length} 个项目</span>
-                    </div>
-                    <div className="provider-projects-actions">
-                      <button
-                        className="secondary-button compact"
-                        type="button"
-                        onClick={() => void syncProjects()}
-                        disabled={!editingId || projectsWorking}
-                      >
-                        <RefreshCw size={16} className={projectsWorking ? "spinning" : ""} />
-                        同步项目与密钥
-                      </button>
-                      <button
-                        className={showProjectAdd ? "secondary-button compact active" : "secondary-button compact"}
-                        type="button"
-                        onClick={() => setShowProjectAdd((currentValue) => !currentValue)}
-                        disabled={!editingId || projectsWorking}
-                        aria-expanded={showProjectAdd}
-                      >
-                        <Plus size={16} />
-                        添加项目
-                      </button>
-                    </div>
-                  </div>
+                </Field>
+                <Field label="OpenAPI Secret Access Key（IAM SK）" htmlFor="credential-sk">
+                  <Input
+                    id="credential-sk"
+                    type={showKey ? "text" : "password"}
+                    value={form.openapi_secret_key}
+                    onChange={(event) => setForm({ ...form, openapi_secret_key: event.target.value })}
+                    placeholder={current?.has_openapi_secret ? "留空则继续使用已保存的 Secret" : "填写 IAM 中生成的 Secret Access Key"}
+                    autoComplete="new-password"
+                    className="font-mono text-[13px]"
+                  />
+                </Field>
+              </div>
 
-                  {showProjectAdd && (
-                    <div className="provider-project-add">
-                      <div>
-                        <label htmlFor="manual-project-name">ProjectName</label>
-                        <input
+              <section aria-labelledby="provider-projects-title" className="flex flex-col gap-4 rounded-lg border bg-muted/30 p-4 md:p-5">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h3 id="provider-projects-title" className="m-0 flex items-center gap-2 text-sm font-semibold text-foreground">
+                      项目管理
+                      <Badge className="rounded-full bg-card px-2 text-[11px] text-muted-foreground ring-1 ring-border">{projects.length} 个项目</Badge>
+                    </h3>
+                    <p className="mt-1 mb-0 text-xs text-muted-foreground">声音克隆、音色同步和空槽位都会按所选项目查询。</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" variant="outline" size="sm" onClick={() => void syncProjects()} disabled={!editingId || projectsWorking}>
+                      <RefreshCw className={cn(projectsWorking && "animate-spin")} />
+                      同步项目与密钥
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={showProjectAdd ? "secondary" : "outline"}
+                      size="sm"
+                      onClick={() => setShowProjectAdd((currentValue) => !currentValue)}
+                      disabled={!editingId || projectsWorking}
+                      aria-expanded={showProjectAdd}
+                    >
+                      <Plus />
+                      添加项目
+                    </Button>
+                  </div>
+                </div>
+
+                {showProjectAdd && (
+                  <div className="flex flex-col gap-2 rounded-md bg-card p-3 ring-1 ring-border">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                      <Field label="ProjectName" htmlFor="manual-project-name" className="flex-1">
+                        <Input
                           id="manual-project-name"
                           value={projectInput}
                           onChange={(event) => setProjectInput(event.target.value)}
-                          onKeyDown={(event) => { if (event.key === "Enter") void addProject(); }}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              void addProject();
+                            }
+                          }}
                           placeholder="例如 default"
                           disabled={!editingId || projectsWorking}
                           autoFocus
+                          className="font-mono"
                         />
-                      </div>
-                      <button
-                        className="primary-button compact"
-                        type="button"
-                        onClick={() => void addProject()}
-                        disabled={!editingId || projectsWorking || !projectInput.trim()}
-                      >
+                      </Field>
+                      <Button type="button" onClick={() => void addProject()} disabled={!editingId || projectsWorking || !projectInput.trim()}>
                         确认添加
-                      </button>
-                      <p>仅在 IAM 无权读取项目时手动添加；这里填写的是 ProjectName。</p>
+                      </Button>
                     </div>
-                  )}
+                    <p className="m-0 text-xs text-muted-foreground">仅在 IAM 无权读取项目时手动添加；这里填写的是 ProjectName。</p>
+                  </div>
+                )}
 
-                  <div className="provider-project-list">
+                {projects.length ? (
+                  <ul className="m-0 flex list-none flex-col divide-y overflow-hidden rounded-md bg-card p-0 ring-1 ring-border">
                     {projects.map((project) => {
                       const isDefault = project.project_name === "default";
                       const displayName = isDefault
@@ -779,101 +1033,148 @@ function ProviderSettings({ models, panelId, labelledBy }: { models: Model[]; pa
                       const apiKeyTitle = apiKeyStatus === "available"
                         ? [project.api_key_name, project.api_key_hint, project.api_key_count && project.api_key_count > 1 ? `${project.api_key_count} 个可用 Key，已自动选择最新一个` : ""].filter(Boolean).join(" · ")
                         : project.api_key_sync_error || apiKeyLabel;
+                      const keyTone = apiKeyStatus === "available"
+                        ? "bg-emerald-50 text-emerald-700"
+                        : apiKeyStatus === "error"
+                          ? "bg-destructive/10 text-destructive"
+                          : apiKeyStatus === "missing"
+                            ? "bg-amber-50 text-amber-700"
+                            : "bg-muted text-muted-foreground";
                       return (
-                        <div className="provider-project-row" key={project.id}>
-                          <div className="provider-project-identity">
-                            <strong title={displayName}>{displayName}</strong>
-                            {showTechnicalName && <code title={project.project_name}>{project.project_name}</code>}
+                        <li key={project.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5">
+                          <div className="min-w-0 flex-1 basis-40">
+                            <strong className="block truncate text-sm font-medium text-foreground" title={displayName}>{displayName}</strong>
+                            {showTechnicalName && <code className="block truncate font-mono text-[11px] text-muted-foreground" title={project.project_name}>{project.project_name}</code>}
                           </div>
-                          <div className="provider-project-meta">
-                            {project.has_permission === false && <span className="project-permission denied">无权限</span>}
-                            <span className={`project-key-status ${apiKeyStatus}`} title={apiKeyTitle}>{apiKeyLabel}</span>
-                            <span>{sourceLabel}</span>
+                          <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                            {project.has_permission === false && <Badge className="rounded-full bg-destructive/10 px-2 text-[11px] text-destructive">无权限</Badge>}
+                            <Badge className={cn("rounded-full px-2 text-[11px]", keyTone)} title={apiKeyTitle}>{apiKeyLabel}</Badge>
+                            <span className="text-muted-foreground">{sourceLabel}</span>
                           </div>
-                          <div className="provider-project-row-actions">
-                            <button
-                              className="icon-button"
-                              type="button"
-                              title="复制 ProjectName"
-                              aria-label={`复制 ProjectName ${project.project_name}`}
-                              onClick={() => void copyProjectName(project.project_name)}
-                            >
-                              {copiedProject === project.project_name ? <Check size={16} /> : <Copy size={16} />}
-                            </button>
-                            <button
-                              className="icon-button project-delete-button"
-                              type="button"
-                              title="从本地项目列表删除"
-                              aria-label={`删除项目 ${displayName}`}
-                              onClick={() => void removeProject(project)}
-                              disabled={projectsWorking}
-                            >
-                              <Trash2 size={16} />
-                            </button>
+                          <div className="flex items-center gap-0.5">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  aria-label={`复制 ProjectName ${project.project_name}`}
+                                  onClick={() => void copyProjectName(project.project_name)}
+                                >
+                                  {copiedProject === project.project_name ? <Check className="text-success" /> : <Copy />}
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>复制 ProjectName</TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  aria-label={`删除项目 ${displayName}`}
+                                  onClick={() => void removeProject(project)}
+                                  disabled={projectsWorking}
+                                  className="hover:bg-destructive/10 hover:text-destructive"
+                                >
+                                  <Trash2 />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>从本地项目列表删除</TooltipContent>
+                            </Tooltip>
                           </div>
-                        </div>
+                        </li>
                       );
                     })}
-                    {!projects.length && (
-                      <div className="provider-project-empty">
-                        保存凭据后同步项目，或手动添加 ProjectName。
-                      </div>
-                    )}
-                  </div>
-                </section>
-              </>
-            )}
-          </div>
+                  </ul>
+                ) : (
+                  <p className="m-0 rounded-md border border-dashed bg-card px-4 py-6 text-center text-xs text-muted-foreground">
+                    保存凭据后同步项目，或手动添加 ProjectName。
+                  </p>
+                )}
+              </section>
+            </>
+          )}
+
           {current?.verification_message && (
-            <div className={"verification-message " + current.status}>
-              <Activity size={15} />
-              <span>
+            <div
+              className={cn(
+                "flex items-start gap-2 rounded-md px-3 py-2.5 text-sm",
+                current.status === "active" ? "bg-emerald-50 text-emerald-800" : current.status === "error" ? "bg-destructive/10 text-destructive" : "bg-muted text-soft",
+              )}
+            >
+              <Activity className="mt-0.5 size-4 shrink-0" />
+              <span className="min-w-0 break-words">
                 {current.verification_message}
                 {current.last_verified_at && (
-                  <small>
-                    {new Date(current.last_verified_at).toLocaleString()}
-                  </small>
+                  <small className="ml-2 text-xs opacity-70">{new Date(current.last_verified_at).toLocaleString()}</small>
                 )}
               </span>
             </div>
           )}
-          {message && <div className="form-message" role="status" aria-live="polite">{message}</div>}
-          <div className="credential-actions">
+          {message && <StatusLine tone={messageIsError ? "error" : "info"}>{message}</StatusLine>}
+
+          <div className="flex flex-wrap items-center gap-2 border-t pt-5">
             {editingId && (
-              <button
-                className="danger-button"
-                onClick={remove}
-                disabled={working}
-                title="删除账号"
-              >
-                <Trash2 size={16} />
-              </button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label="删除账号"
+                    onClick={() => void remove()}
+                    disabled={working}
+                    className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  >
+                    <Trash2 />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>删除账号</TooltipContent>
+              </Tooltip>
             )}
-            <div className="action-spacer" />
-            <button
-              className="secondary-button"
-              onClick={verify}
-              disabled={!editingId || working}
-            >
-              <Activity size={16} />
-              {provider === "dashscope" ||
-              provider === "mimo" ||
-              provider === "volcengine" ||
-              provider === "minimax"
-                ? "验证鉴权"
-                : "检查保存"}
-            </button>
-            <button
-              className="primary-button compact"
-              onClick={save}
-              disabled={working}
-            >
-              <Save size={16} />
-              {working ? "处理中..." : editingId ? "保存修改" : "保存账号"}
-            </button>
+            <div className="ml-auto flex flex-wrap gap-2">
+              <Button type="button" variant="outline" onClick={() => void verify()} disabled={!editingId || working}>
+                <Activity />
+                {verifyLabel}
+              </Button>
+              <Button type="submit" disabled={working}>
+                <Save />
+                {working ? "处理中..." : editingId ? "保存修改" : "保存账号"}
+              </Button>
+            </div>
           </div>
-        </div>
-      </div>
+        </form>
+      </section>
+    </div>
+  );
+}
+
+function SecretInput({
+  visible,
+  onToggle,
+  ...props
+}: ComponentProps<typeof Input> & { visible: boolean; onToggle: () => void }) {
+  const label = visible ? "隐藏密钥" : "显示密钥";
+  return (
+    <div className="relative">
+      <Input {...props} type={visible ? "text" : "password"} className="pr-11 font-mono text-[13px]" />
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label={label}
+            aria-pressed={visible}
+            onClick={onToggle}
+            className="absolute top-1/2 right-1 -translate-y-1/2"
+          >
+            {visible ? <EyeOff /> : <Eye />}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>{label}</TooltipContent>
+      </Tooltip>
     </div>
   );
 }

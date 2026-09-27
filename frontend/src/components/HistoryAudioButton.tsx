@@ -1,61 +1,41 @@
-import { useEffect, useRef, useState } from "react";
-import { Pause, Play } from "lucide-react";
-import { historyAudioController } from "../audioPlayback";
+import { Play } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { usePlayer } from "@/context/PlayerContext";
+import { cn } from "@/lib/utils";
+import { EqualizerBars } from "./ProviderMark";
 
-export function HistoryAudioButton({ src, label, compact = false }: { src?: string | null; label: string; compact?: boolean }) {
-  const audioRef = useRef<HTMLAudioElement>(null);
-  const [playing, setPlaying] = useState(false);
-  const handlePlay = () => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    historyAudioController.activate(audio);
-    setPlaying(true);
+type HistoryAudioButtonProps = {
+  src?: string | null;
+  label: string;
+  title: string;
+  subtitle?: string;
+  downloadName?: string;
+  className?: string;
+};
+
+/** 历史列表的播放按钮：交给底部播放条播放，同一时间只播放一条。 */
+export function HistoryAudioButton({ src, label, title, subtitle, downloadName, className }: HistoryAudioButtonProps) {
+  const player = usePlayer();
+  const active = Boolean(src && player.isCurrent(src));
+  const playing = active && player.playing;
+  const onClick = () => {
+    if (!src) return;
+    if (active) player.toggle();
+    else player.play({ src, title, subtitle, downloadName });
   };
-  const handleStop = () => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    historyAudioController.release(audio);
-    setPlaying(false);
-  };
-  useEffect(
-    () => () => {
-      const audio = audioRef.current;
-      if (!audio) return;
-      audio.pause();
-      historyAudioController.release(audio);
-    },
-    [],
-  );
-  const toggle = async () => {
-    const audio = audioRef.current;
-    if (!audio || !src) return;
-    if (audio.paused) {
-      historyAudioController.activate(audio);
-      try {
-        await audio.play();
-      } catch {
-        historyAudioController.release(audio);
-        setPlaying(false);
-      }
-    } else {
-      audio.pause();
-    }
-  };
+  const accessibleLabel = !src ? "声音文件不可用" : playing ? `暂停：${label}` : label;
   return (
-    <>
-      <button className={`history-play${compact ? " compact" : ""}`} onClick={() => void toggle()} disabled={!src} title={src ? label : "声音文件不可用"} aria-label={src ? label : "声音文件不可用"}>
-        {playing ? <Pause size={compact ? 15 : 18} fill="currentColor" /> : <Play size={compact ? 15 : 18} fill="currentColor" />}
-      </button>
-      {src && (
-        <audio
-          ref={audioRef}
-          src={src}
-          preload="none"
-          onPlay={handlePlay}
-          onPause={handleStop}
-          onEnded={handleStop}
-        />
-      )}
-    </>
+    <Button
+      variant={active ? "secondary" : "outline"}
+      size="icon"
+      className={cn("shrink-0 rounded-full", active && "text-brand", className)}
+      onClick={onClick}
+      disabled={!src}
+      title={accessibleLabel}
+      aria-label={accessibleLabel}
+      aria-pressed={playing}
+    >
+      {playing ? <EqualizerBars className="h-3.5 text-brand" /> : <Play fill="currentColor" className="size-3.5 translate-x-px" />}
+    </Button>
   );
 }

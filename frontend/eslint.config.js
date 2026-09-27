@@ -22,7 +22,7 @@ export default tseslint.config(
       "react-hooks/exhaustive-deps": "warn",
       "react-refresh/only-export-components": [
         "warn",
-        { allowConstantExport: true, allowExportNames: ["useStudio"] },
+        { allowConstantExport: true, allowExportNames: ["useStudio", "useConfirm", "usePlayer", "playbackRates", "buttonVariants", "badgeVariants", "tabsListVariants", "toggleVariants"] },
       ],
     },
   },

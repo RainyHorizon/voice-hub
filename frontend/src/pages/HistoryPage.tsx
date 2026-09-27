@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
-  Activity,
   CalendarDays,
   Check,
   ChevronDown,
@@ -10,12 +9,22 @@ import {
   Download,
   FileText,
   ListChecks,
+  Mic2,
   RefreshCw,
   Trash2,
+  X,
 } from "lucide-react";
+import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useConfirm } from "@/components/feedback/ConfirmProvider";
+import { cn } from "@/lib/utils";
 import { api, responseError } from "../api";
 import { HistoryAudioButton } from "../components/HistoryAudioButton";
-import { WorkspaceHero } from "../components/WorkspaceHero";
+import { PageHeader } from "../components/layout/PageHeader";
 import { useStudio } from "../context/StudioContext";
 import type { Job } from "../types";
 import { formatBytes } from "../utils";
@@ -60,102 +69,6 @@ function historyFilterLabel(filter: HistoryFilter) {
   return "全部日期";
 }
 
-function HistoryDateMenu({ filter, onChange }: { filter: HistoryFilter; onChange: (filter: HistoryFilter) => void }) {
-  const [open, setOpen] = useState(false);
-  const [month, setMonth] = useState(() => {
-    const source = filter.kind === "day" ? dateFromKey(filter.date) : new Date();
-    return new Date(source.getFullYear(), source.getMonth(), 1, 12);
-  });
-  const containerRef = useRef<HTMLDivElement>(null);
-  const todayKey = localDateKey(new Date());
-  const selectedKey = filter.kind === "day" ? filter.date : "";
-  const firstDay = new Date(month.getFullYear(), month.getMonth(), 1, 12);
-  const mondayOffset = (firstDay.getDay() + 6) % 7;
-  const calendarDays = Array.from({ length: 42 }, (_, index) => {
-    const date = new Date(month.getFullYear(), month.getMonth(), 1 - mondayOffset + index, 12);
-    return date;
-  });
-
-  useEffect(() => {
-    if (!open) return;
-    const closeOnOutsideClick = (event: MouseEvent) => {
-      if (!containerRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("mousedown", closeOnOutsideClick);
-    document.addEventListener("keydown", closeOnEscape);
-    return () => {
-      document.removeEventListener("mousedown", closeOnOutsideClick);
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [open]);
-
-  const choose = (next: HistoryFilter) => {
-    onChange(next);
-    setOpen(false);
-  };
-  const toggle = () => {
-    if (!open) {
-      const source = filter.kind === "day" ? dateFromKey(filter.date) : new Date();
-      setMonth(new Date(source.getFullYear(), source.getMonth(), 1, 12));
-    }
-    setOpen((current) => !current);
-  };
-  const presetSelected = (kind: HistoryFilter["kind"]) => filter.kind === kind;
-
-  return (
-    <div className="history-date-menu" ref={containerRef}>
-      <button className={filter.kind === "all" ? "history-date-trigger" : "history-date-trigger active"} type="button" onClick={toggle} aria-haspopup="dialog" aria-expanded={open}>
-        <CalendarDays size={18} />
-        <span>{historyFilterLabel(filter)}</span>
-        <ChevronDown size={16} />
-      </button>
-      {open && (
-        <div className="history-calendar-popover" role="dialog" aria-label="筛选任务日期">
-          <div className="history-date-presets">
-            {([
-              ["all", "全部日期"],
-              ["today", "今天"],
-              ["yesterday", "昨天"],
-              ["recent", "最近 7 天"],
-            ] as const).map(([kind, label]) => (
-              <button className={presetSelected(kind) ? "selected" : ""} type="button" onClick={() => choose(kind === "recent" ? { kind, days: 7 } : { kind })} key={kind}>
-                <span>{label}</span>
-                {presetSelected(kind) && <Check size={15} />}
-              </button>
-            ))}
-          </div>
-          <div className="history-calendar">
-            <div className="history-calendar-head">
-              <strong>{new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long" }).format(month)}</strong>
-              <div>
-                <button type="button" onClick={() => setMonth((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1, 12))} title="上个月" aria-label="上个月"><ChevronLeft size={18} /></button>
-                <button type="button" onClick={() => setMonth((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1, 12))} title="下个月" aria-label="下个月"><ChevronRight size={18} /></button>
-              </div>
-            </div>
-            <div className="history-calendar-weekdays" aria-hidden="true">
-              {["一", "二", "三", "四", "五", "六", "日"].map((day) => <span key={day}>{day}</span>)}
-            </div>
-            <div className="history-calendar-days">
-              {calendarDays.map((date) => {
-                const key = localDateKey(date);
-                const classes = [
-                  date.getMonth() !== month.getMonth() ? "outside" : "",
-                  key === todayKey ? "today" : "",
-                  key === selectedKey ? "selected" : "",
-                ].filter(Boolean).join(" ");
-                return <button className={classes} type="button" onClick={() => choose({ kind: "day", date: key })} aria-label={key} aria-pressed={key === selectedKey} key={key}>{date.getDate()}</button>;
-              })}
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function matchesHistoryFilter(job: Job, filter: HistoryFilter) {
   const key = jobDateKey(job);
   if (filter.kind === "today") return key === shiftedDateKey(0);
@@ -171,13 +84,139 @@ function historyGroupLabel(key: string) {
   return new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long", day: "numeric" }).format(dateFromKey(key));
 }
 
+function jobTime(job: Job) {
+  const date = new Date(job.created_at);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("zh-CN", { hour: "2-digit", minute: "2-digit" }).format(date);
+}
+
+function audioFileName(job: Job) {
+  const name = job.audio_url?.split("?")[0].split("/").pop();
+  return name ? decodeURIComponent(name) : `voice-hub-${job.id}`;
+}
+
+const presets = [
+  ["all", "全部日期"],
+  ["today", "今天"],
+  ["yesterday", "昨天"],
+  ["recent", "最近 7 天"],
+] as const;
+
+function HistoryDateMenu({ filter, onChange }: { filter: HistoryFilter; onChange: (filter: HistoryFilter) => void }) {
+  const [open, setOpen] = useState(false);
+  const [month, setMonth] = useState(() => {
+    const source = filter.kind === "day" ? dateFromKey(filter.date) : new Date();
+    return new Date(source.getFullYear(), source.getMonth(), 1, 12);
+  });
+  const todayKey = localDateKey(new Date());
+  const selectedKey = filter.kind === "day" ? filter.date : "";
+  const firstDay = new Date(month.getFullYear(), month.getMonth(), 1, 12);
+  const mondayOffset = (firstDay.getDay() + 6) % 7;
+  const calendarDays = Array.from(
+    { length: 42 },
+    (_, index) => new Date(month.getFullYear(), month.getMonth(), 1 - mondayOffset + index, 12),
+  );
+
+  const changeOpen = (next: boolean) => {
+    if (next) {
+      const source = filter.kind === "day" ? dateFromKey(filter.date) : new Date();
+      setMonth(new Date(source.getFullYear(), source.getMonth(), 1, 12));
+    }
+    setOpen(next);
+  };
+  const choose = (next: HistoryFilter) => {
+    onChange(next);
+    setOpen(false);
+  };
+  const shiftMonth = (delta: number) =>
+    setMonth((current) => new Date(current.getFullYear(), current.getMonth() + delta, 1, 12));
+
+  return (
+    <Popover open={open} onOpenChange={changeOpen}>
+      <PopoverTrigger asChild>
+        <Button variant="outline" className={cn("justify-between gap-2", filter.kind !== "all" && "border-brand/40 bg-accent text-accent-foreground")}>
+          <CalendarDays />
+          <span>{historyFilterLabel(filter)}</span>
+          <ChevronDown className="opacity-60" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" aria-label="筛选任务日期" className="flex w-auto max-w-[calc(100vw-2rem)] flex-col gap-3 p-3 sm:flex-row">
+        <div className="flex gap-1 overflow-x-auto sm:w-32 sm:flex-col sm:border-r sm:pr-3">
+          {presets.map(([kind, label]) => {
+            const selected = filter.kind === kind;
+            return (
+              <button
+                key={kind}
+                type="button"
+                onClick={() => choose(kind === "recent" ? { kind, days: 7 } : { kind })}
+                aria-pressed={selected}
+                className={cn(
+                  "flex shrink-0 items-center justify-between gap-2 rounded-sm px-3 py-2 text-left text-sm whitespace-nowrap outline-none transition-colors hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                  selected && "bg-accent font-medium text-accent-foreground hover:bg-accent",
+                )}
+              >
+                {label}
+                {selected && <Check className="size-3.5 text-brand" />}
+              </button>
+            );
+          })}
+        </div>
+        <div className="w-[16.5rem]">
+          <div className="mb-2 flex items-center justify-between">
+            <strong className="pl-1 text-sm font-semibold text-foreground">
+              {new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long" }).format(month)}
+            </strong>
+            <div className="flex gap-0.5">
+              <Button variant="ghost" size="icon-sm" onClick={() => shiftMonth(-1)} aria-label="上个月" title="上个月">
+                <ChevronLeft />
+              </Button>
+              <Button variant="ghost" size="icon-sm" onClick={() => shiftMonth(1)} aria-label="下个月" title="下个月">
+                <ChevronRight />
+              </Button>
+            </div>
+          </div>
+          <div className="grid grid-cols-7 text-center text-[11px] text-muted-foreground" aria-hidden="true">
+            {["一", "二", "三", "四", "五", "六", "日"].map((day) => (
+              <span key={day} className="py-1">{day}</span>
+            ))}
+          </div>
+          <div className="grid grid-cols-7 gap-0.5">
+            {calendarDays.map((date) => {
+              const key = localDateKey(date);
+              const outside = date.getMonth() !== month.getMonth();
+              const selected = key === selectedKey;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => choose({ kind: "day", date: key })}
+                  aria-label={key}
+                  aria-pressed={selected}
+                  className={cn(
+                    "relative grid aspect-square place-items-center rounded-sm text-[13px] tabular-nums outline-none transition-colors hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                    outside && "text-muted-foreground/60",
+                    key === todayKey && !selected && "font-semibold text-brand",
+                    selected && "bg-primary font-semibold text-primary-foreground hover:bg-primary",
+                  )}
+                >
+                  {date.getDate()}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export function HistoryPage() {
-  const { jobs, voices, refreshJobs: onRefresh } = useStudio();
+  const { jobs, voices, setActive, refreshJobs: onRefresh } = useStudio();
+  const confirm = useConfirm();
   const [dateFilter, setDateFilter] = useState<HistoryFilter>({ kind: "all" });
   const [batchMode, setBatchMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [working, setWorking] = useState(false);
-  const [message, setMessage] = useState("");
   const voiceNames = useMemo(
     () => new Map(voices.map((voice) => [voice.public_name, voice.display_name])),
     [voices],
@@ -202,14 +241,12 @@ export function HistoryPage() {
   const changeFilter = (next: HistoryFilter) => {
     setDateFilter(next);
     setSelectedIds(new Set());
-    setMessage("");
   };
   const toggleBatchMode = () => {
     setBatchMode((current) => {
       if (current) setSelectedIds(new Set());
       return !current;
     });
-    setMessage("");
   };
   const toggleAll = () => {
     setSelectedIds((current) => {
@@ -229,9 +266,9 @@ export function HistoryPage() {
   };
   const downloadZip = async () => {
     const exportIds = selectedJobs.map((job) => job.id);
-    if (!exportIds.length) return setMessage("请先选择要导出的任务");
+    if (!exportIds.length) return void toast.error("请先选择要导出的任务");
     setWorking(true);
-    setMessage("正在整理 ZIP 文件...");
+    const pending = toast.loading("正在整理 ZIP 文件...");
     try {
       const response = await fetch("/api/jobs/export", {
         method: "POST",
@@ -245,17 +282,17 @@ export function HistoryPage() {
       anchor.download = "voice-hub-selected-jobs.zip";
       anchor.click();
       URL.revokeObjectURL(url);
-      setMessage("ZIP 已开始下载");
+      toast.success("ZIP 已开始下载", { id: pending, description: `共 ${exportIds.length} 条任务` });
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "导出失败");
+      toast.error(error instanceof Error ? error.message : "导出失败", { id: pending });
     } finally {
       setWorking(false);
     }
   };
   const deleteSelected = async () => {
     const ids = selectedJobs.map((job) => job.id);
-    if (!ids.length) return setMessage("请先选择要删除的任务");
-    if (!window.confirm(`确定删除选中的 ${ids.length} 条任务及对应音频吗？此操作不可撤销。`)) return;
+    if (!ids.length) return void toast.error("请先选择要删除的任务");
+    if (!(await confirm({ title: `删除选中的 ${ids.length} 条任务？`, description: "任务记录和对应音频会一并删除，此操作不可撤销。", confirmLabel: "删除", destructive: true }))) return;
     setWorking(true);
     try {
       const result = await api<{ message: string; freed_bytes: number }>("/api/jobs/delete", {
@@ -265,24 +302,24 @@ export function HistoryPage() {
       });
       setSelectedIds(new Set());
       setBatchMode(false);
-      setMessage(`${result.message}，释放 ${formatBytes(result.freed_bytes)}`);
+      toast.success(result.message, { description: `释放 ${formatBytes(result.freed_bytes)}` });
       await onRefresh();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "删除失败");
+      toast.error(error instanceof Error ? error.message : "删除失败");
     } finally {
       setWorking(false);
     }
   };
   const deleteOne = async (job: Job) => {
-    if (!window.confirm(`确定删除这条任务及对应音频吗？此操作不可撤销。`)) return;
+    if (!(await confirm({ title: "删除这条任务？", description: "任务记录和对应音频会一并删除，此操作不可撤销。", confirmLabel: "删除", destructive: true }))) return;
     setWorking(true);
     try {
       const result = await api<{ message: string; freed_bytes: number }>(`/api/jobs/${job.id}`, { method: "DELETE" });
       setSelectedIds((current) => new Set([...current].filter((id) => id !== job.id)));
-      setMessage(`${result.message}，释放 ${formatBytes(result.freed_bytes)}`);
+      toast.success(result.message, { description: `释放 ${formatBytes(result.freed_bytes)}` });
       await onRefresh();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "删除失败");
+      toast.error(error instanceof Error ? error.message : "删除失败");
     } finally {
       setWorking(false);
     }
@@ -292,72 +329,243 @@ export function HistoryPage() {
     try {
       await onRefresh();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "刷新失败");
+      toast.error(error instanceof Error ? error.message : "刷新失败");
     } finally {
       setWorking(false);
     }
   };
 
+  const selectAllState = allVisibleSelected ? true : selectedJobs.length ? "indeterminate" : false;
+
   return (
-    <section className="page-section history-page">
-      <WorkspaceHero
-        title="每一次生成"
-        accent="都留下可追溯的声音。"
+    <section>
+      <PageHeader
+        title="任务历史"
         description="按日期浏览生成任务，试听、下载文字记录与音频，或批量整理历史文件。"
+        actions={
+          <>
+            <Button variant={batchMode ? "secondary" : "outline"} onClick={toggleBatchMode} aria-pressed={batchMode}>
+              {batchMode ? <X /> : <ListChecks />}
+              {batchMode ? "退出批量管理" : "批量管理"}
+            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="outline" size="icon" onClick={() => void refresh()} disabled={working} aria-label="刷新任务历史">
+                  <RefreshCw className={cn(working && "animate-spin")} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>刷新任务历史</TooltipContent>
+            </Tooltip>
+          </>
+        }
       />
-      <div className="history-command-bar">
-        <HistoryDateMenu filter={dateFilter} onChange={changeFilter} />
-        <div className="history-command-actions">
-          <button className={batchMode ? "secondary-button active" : "secondary-button"} type="button" onClick={toggleBatchMode}>
-            <ListChecks size={17} />
-            {batchMode ? "退出批量管理" : "批量管理"}
-          </button>
-          <button className={working ? "icon-button history-refresh working" : "icon-button history-refresh"} type="button" onClick={() => void refresh()} disabled={working} title="刷新任务历史" aria-label="刷新任务历史"><RefreshCw size={18} /></button>
+
+      <div className="flex flex-col gap-5">
+        <div className="flex flex-wrap items-center gap-3">
+          <HistoryDateMenu filter={dateFilter} onChange={changeFilter} />
+          {dateFilter.kind !== "all" && (
+            <Button variant="ghost" size="sm" onClick={() => changeFilter({ kind: "all" })}>
+              清除筛选
+            </Button>
+          )}
+          <span className="ml-auto text-sm text-muted-foreground tabular-nums">共 {filtered.length} 条</span>
         </div>
-      </div>
-      {batchMode && (
-        <div className="history-selection-bar">
-          <div className="history-selection-summary">
-            <span>已选择 <strong>{selectedJobs.length}</strong> 条</span>
-            <button className="inline-action" type="button" onClick={toggleAll} disabled={!visibleIds.length}>{allVisibleSelected ? "取消全选" : "全选"}</button>
+
+        {batchMode && (
+          <div
+            role="region"
+            aria-label="批量操作"
+            className="glass sticky top-[4.5rem] z-30 flex flex-wrap items-center gap-3 rounded-xl border px-4 py-3 shadow-float animate-page-in md:top-4 md:px-5"
+          >
+            <label className="flex cursor-pointer items-center gap-2.5 text-sm font-medium text-foreground">
+              <Checkbox
+                checked={selectAllState}
+                onCheckedChange={toggleAll}
+                disabled={!visibleIds.length}
+                aria-label={allVisibleSelected ? "取消全选" : "全选"}
+              />
+              {allVisibleSelected ? "取消全选" : "全选"}
+            </label>
+            <span className="text-sm text-muted-foreground" aria-live="polite">
+              已选择 <strong className="font-semibold text-foreground tabular-nums">{selectedJobs.length}</strong> 条
+            </span>
+            <div className="ml-auto flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => void downloadZip()} disabled={working || !selectedJobs.length}>
+                <Download />
+                下载 ZIP
+              </Button>
+              <Button variant="destructive" size="sm" onClick={() => void deleteSelected()} disabled={working || !selectedJobs.length}>
+                <Trash2 />
+                删除
+              </Button>
+            </div>
           </div>
-          <div className="history-selection-actions">
-            <button className="secondary-button" type="button" onClick={() => void downloadZip()} disabled={working || !selectedJobs.length}><Download size={16} />下载 ZIP</button>
-            <button className="danger-button" type="button" onClick={() => void deleteSelected()} disabled={working || !selectedJobs.length}><Trash2 size={16} />删除</button>
+        )}
+
+        {groups.length === 0 ? (
+          <div className="island flex flex-col items-center gap-3 px-6 py-16 text-center">
+            <span className="grid size-12 place-items-center rounded-full bg-accent text-brand">
+              <Clock3 className="size-5" />
+            </span>
+            <p className="m-0 text-sm text-muted-foreground">
+              {dateFilter.kind === "all" ? "还没有任务，去语音合成生成第一条语音。" : "这个日期范围内没有任务记录。"}
+            </p>
+            {dateFilter.kind === "all" ? (
+              <Button size="sm" onClick={() => setActive("synthesize")}>
+                <Mic2 />
+                去语音合成
+              </Button>
+            ) : (
+              <Button variant="outline" size="sm" onClick={() => changeFilter({ kind: "all" })}>
+                查看全部日期
+              </Button>
+            )}
           </div>
-        </div>
-      )}
-      {message && <div className="history-message"><Activity size={14} />{message}</div>}
-      {groups.length === 0 ? (
-        <div className="empty-state history-empty"><Clock3 size={22} /><span>{dateFilter.kind === "all" ? "还没有任务，去语音合成生成第一条语音。" : "这个日期范围内没有任务记录。"}</span></div>
-      ) : (
-        <div className="history-groups">
-          {groups.map(([date, dateJobs]) => (
-            <section className="history-date-group" key={date}>
-              <h2>{historyGroupLabel(date)}</h2>
-              <div className="history-list">
-                {dateJobs.map((job) => {
-                  const voiceName = voiceNames.get(job.voice) || job.voice;
-                  return <article className={batchMode ? `history-row batch-selecting${selectedIds.has(job.id) ? " selected" : ""}` : "history-row"} key={job.id}>
-                    {batchMode && <label className="history-checkbox"><input type="checkbox" checked={selectedIds.has(job.id)} onChange={() => toggleJob(job.id)} aria-label={`选择任务 ${job.id}`} /></label>}
-                    <HistoryAudioButton src={job.audio_url} label="播放这条语音" />
-                    <div className="history-main">
-                      <strong title={job.input_text || `${voiceName} · ${job.model}`}>{job.input_text || `${voiceName} · ${job.model}`}</strong>
-                      <span>{voiceName} · {job.model}</span>
-                      {job.input_text && <details className="history-record"><summary>查看文字记录</summary><p>{job.input_text}</p></details>}
-                    </div>
-                    {!batchMode && <div className="history-actions">
-                      <a className={job.text_url ? "history-action" : "history-action disabled"} href={job.text_url || undefined} title={job.text_url ? "下载文字记录" : "没有可下载的文字记录"} aria-label="下载文字记录"><FileText size={16} /></a>
-                      <a className={job.audio_url ? "history-action" : "history-action disabled"} href={job.audio_url || undefined} title={job.audio_url ? "下载声音文件" : "声音文件不可用"} aria-label="下载声音文件"><Download size={16} /></a>
-                      <button className="history-action danger-action" onClick={() => void deleteOne(job)} title="删除任务" aria-label="删除任务"><Trash2 size={16} /></button>
-                    </div>}
-                  </article>;
-                })}
-              </div>
+        ) : (
+          groups.map(([date, dateJobs]) => (
+            <section key={date} aria-labelledby={`history-group-${date}`} className="flex flex-col gap-2.5">
+              <h2 id={`history-group-${date}`} className="m-0 flex items-baseline gap-2 px-1 text-sm font-semibold text-foreground">
+                {historyGroupLabel(date)}
+                <span className="text-xs font-normal text-muted-foreground tabular-nums">{dateJobs.length} 条</span>
+              </h2>
+              <ul className="island m-0 list-none divide-y overflow-hidden p-0">
+                {dateJobs.map((job) => (
+                  <HistoryRow
+                    key={job.id}
+                    job={job}
+                    voiceName={voiceNames.get(job.voice) || job.voice}
+                    batchMode={batchMode}
+                    selected={selectedIds.has(job.id)}
+                    onToggle={() => toggleJob(job.id)}
+                    onDelete={() => void deleteOne(job)}
+                    disabled={working}
+                  />
+                ))}
+              </ul>
             </section>
-          ))}
+          ))
+        )}
+      </div>
+    </section>
+  );
+}
+
+type HistoryRowProps = {
+  job: Job;
+  voiceName: string;
+  batchMode: boolean;
+  selected: boolean;
+  disabled: boolean;
+  onToggle: () => void;
+  onDelete: () => void;
+};
+
+function HistoryRow({ job, voiceName, batchMode, selected, disabled, onToggle, onDelete }: HistoryRowProps) {
+  const headline = job.input_text || `${voiceName} · ${job.model}`;
+  const time = jobTime(job);
+  const audioCleaned = !job.audio_url && Boolean(job.audio_cleaned_at);
+  return (
+    <li
+      className={cn(
+        "flex items-start gap-3 px-4 py-3.5 transition-colors sm:gap-4 sm:px-5",
+        batchMode && "cursor-pointer hover:bg-muted/50",
+        selected && "bg-accent/60 hover:bg-accent/70",
+      )}
+      onClick={batchMode ? onToggle : undefined}
+    >
+      {batchMode && (
+        <Checkbox
+          checked={selected}
+          onCheckedChange={onToggle}
+          onClick={(event) => event.stopPropagation()}
+          aria-label={`选择任务 ${job.id}`}
+          className="mt-2.5"
+        />
+      )}
+      <HistoryAudioButton
+        src={job.audio_url}
+        label="播放这条语音"
+        title={headline}
+        subtitle={`${voiceName} · ${job.model}`}
+        downloadName={audioFileName(job)}
+        className="mt-0.5"
+      />
+      <div className="min-w-0 flex-1">
+        <strong className="block truncate text-[15px] font-medium text-foreground" title={headline}>
+          {headline}
+        </strong>
+        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+          {time && <span className="tabular-nums">{time}</span>}
+          {time && <span aria-hidden className="text-border">·</span>}
+          <span className="truncate">{voiceName}</span>
+          <span aria-hidden className="text-border">·</span>
+          <span className="truncate font-mono text-[11px]">{job.model}</span>
+          {job.input_chars > 0 && (
+            <>
+              <span aria-hidden className="text-border">·</span>
+              <span className="tabular-nums">{job.input_chars.toLocaleString()} 字</span>
+            </>
+          )}
+          {audioCleaned && <Badge className="rounded-full bg-muted px-2 text-[11px] text-muted-foreground">音频已清理</Badge>}
+        </div>
+        {job.input_text && !batchMode && (
+          <details className="group mt-2 text-sm" onClick={(event) => event.stopPropagation()}>
+            <summary className="w-fit cursor-pointer list-none rounded-sm text-xs font-medium text-brand outline-none select-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50 [&::-webkit-details-marker]:hidden">
+              <span className="group-open:hidden">查看文字记录</span>
+              <span className="hidden group-open:inline">收起文字记录</span>
+            </summary>
+            <p className="m-0 mt-2 rounded-md bg-muted/60 px-3.5 py-3 leading-7 whitespace-pre-wrap text-soft">{job.input_text}</p>
+          </details>
+        )}
+      </div>
+      {!batchMode && (
+        <div className="flex shrink-0 items-center gap-0.5">
+          <RowLink href={job.text_url} label="下载文字记录" unavailable="没有可下载的文字记录" icon={<FileText />} />
+          <RowLink href={job.audio_url} label="下载声音文件" unavailable="声音文件不可用" icon={<Download />} />
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={onDelete}
+                disabled={disabled}
+                aria-label="删除任务"
+                className="hover:bg-destructive/10 hover:text-destructive"
+              >
+                <Trash2 />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>删除任务</TooltipContent>
+          </Tooltip>
         </div>
       )}
-    </section>
+    </li>
+  );
+}
+
+function RowLink({ href, label, unavailable, icon }: { href?: string | null; label: string; unavailable: string; icon: ReactNode }) {
+  if (!href) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span tabIndex={0} aria-label={unavailable} className="grid size-8 place-items-center rounded-md text-muted-foreground/50 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 [&_svg]:size-4">
+            {icon}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>{unavailable}</TooltipContent>
+      </Tooltip>
+    );
+  }
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button variant="ghost" size="icon-sm" asChild>
+          <a href={href} download aria-label={label}>
+            {icon}
+          </a>
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
   );
 }
