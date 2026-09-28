@@ -78,9 +78,14 @@ jobs:
           if (Test-Path -LiteralPath $extract) { Remove-Item -LiteralPath $extract -Recurse -Force }
           if (Test-Path -LiteralPath $runtime) { Remove-Item -LiteralPath $runtime -Recurse -Force }
           Expand-Archive -LiteralPath $archive.FullName -DestinationPath $extract
-          $portable = Get-ChildItem -LiteralPath $extract -Directory | Select-Object -First 1
+          $entrypoint = Get-ChildItem -LiteralPath $extract -Filter 'VoiceHub.exe' -File -Recurse | Select-Object -First 1
+          if (-not $entrypoint) { throw "便携版 ZIP 中未找到 VoiceHub.exe。" }
+          $portable = $entrypoint.Directory
           New-Item -ItemType Directory -Force -Path $runtime | Out-Null
           Get-ChildItem -LiteralPath $portable.FullName -Force | Copy-Item -Destination $runtime -Recurse -Force
+          if (-not (Test-Path -LiteralPath (Join-Path $runtime 'VoiceHub.exe') -PathType Leaf)) {
+            throw "便携版后端未正确暂存到 Tauri 资源目录。"
+          }
 
       - name: Install desktop dependencies
         working-directory: desktop
