@@ -1,0 +1,36 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Voice Hub",
+  "version": "1.7.0",
+  "identifier": "com.rainyhorizon.voicehub",
+  "build": {
+    "beforeDevCommand": "npm --prefix ../frontend run build",
+    "beforeBuildCommand": "npm --prefix ../frontend run build",
+    "devUrl": "http://127.0.0.1:8765",
+    "frontendDist": "../../frontend/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Voice Hub",
+        "url": "http://127.0.0.1:8765",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 1024,
+        "minHeight": 700,
+        "resizable": true,
+        "fullscreen": false,
+        "visible": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "resources": ["backend-runtime/**"]
+  }
+}

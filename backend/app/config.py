@@ -14,7 +14,7 @@ DATA = ROOT / "data"
 AUDIO = DATA / "audio"
 LOGS = DATA / "logs"
 DB_PATH = DATA / "voice_studio.db"
-FRONTEND_DIST = ROOT / "frontend" / "dist"
+FRONTEND_DIST = Path(os.getenv("VOICE_STUDIO_FRONTEND_DIST", ROOT / "frontend" / "dist")).expanduser().resolve()
 GATEWAY_CONFIG_PATH = DATA / "gateway.json"
 APP_VERSION = os.getenv("VOICE_STUDIO_VERSION", "1.7.0").strip() or "1.7.0"
 try:

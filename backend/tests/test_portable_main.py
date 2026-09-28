@@ -28,6 +28,29 @@ class PortablePortTests(unittest.TestCase):
 
 
 class PortableEnvironmentTests(unittest.TestCase):
+    def test_prepare_environment_uses_separate_desktop_data_directory(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "bundle"
+            desktop_root = Path(temp_dir) / "desktop-user-data"
+            for relative in ("tools/ffmpeg.exe", "tools/ffprobe.exe", "frontend/dist/index.html"):
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.touch()
+
+            saved = {name: os.environ.get(name) for name in ("VOICE_HUB_DESKTOP_ROOT", "VOICE_STUDIO_ROOT", "VOICE_STUDIO_PORT", "PATH")}
+            try:
+                os.environ["VOICE_HUB_DESKTOP_ROOT"] = str(desktop_root)
+                portable_main.prepare_environment(root, 8877)
+                self.assertEqual(Path(os.environ["VOICE_STUDIO_ROOT"]), desktop_root.resolve())
+                self.assertTrue((desktop_root / "data").is_dir())
+                self.assertFalse((root / "data").exists())
+            finally:
+                for name, value in saved.items():
+                    if value is None:
+                        os.environ.pop(name, None)
+                    else:
+                        os.environ[name] = value
+
     def test_prepare_environment_uses_bundled_tools_and_data_directory(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

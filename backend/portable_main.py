@@ -70,7 +70,9 @@ def prepare_environment(root: Path, port: int) -> None:
     if missing:
         raise RuntimeError(f"便携版文件不完整，缺少：{', '.join(missing)}")
 
-    data = root / "data"
+    desktop_root = os.getenv("VOICE_HUB_DESKTOP_ROOT")
+    data_root = Path(desktop_root).expanduser().resolve() if desktop_root else root
+    data = data_root / "data"
     data.mkdir(parents=True, exist_ok=True)
     write_probe = data / f".write-test-{os.getpid()}"
     try:
@@ -78,7 +80,7 @@ def prepare_environment(root: Path, port: int) -> None:
     finally:
         write_probe.unlink(missing_ok=True)
 
-    os.environ["VOICE_STUDIO_ROOT"] = str(root)
+    os.environ["VOICE_STUDIO_ROOT"] = str(data_root)
     os.environ["VOICE_STUDIO_PORT"] = str(port)
     os.environ["PATH"] = f"{tools}{os.pathsep}{os.environ.get('PATH', '')}"
 
