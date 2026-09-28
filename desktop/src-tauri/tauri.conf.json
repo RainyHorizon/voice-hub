@@ -31,6 +31,8 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
-    "resources": ["backend-runtime/**"]
+    "resources": {
+      "src-tauri/backend-runtime/": "backend-runtime/"
+    }
   }
 }
