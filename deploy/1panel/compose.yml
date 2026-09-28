@@ -1,0 +1,43 @@
+services:
+  voice-hub:
+    image: ghcr.io/rainyhorizon/voice-hub:${VOICE_STUDIO_VERSION:-1.7.0}
+    container_name: voice-hub
+    restart: unless-stopped
+    init: true
+    pull_policy: always
+    ports:
+      - "127.0.0.1:${VOICE_STUDIO_HOST_PORT:-8765}:8765"
+    environment:
+      VOICE_STUDIO_CREDENTIALS_MODE: env
+      VOICE_STUDIO_VERSION: ${VOICE_STUDIO_VERSION:-1.7.0}
+      VOICE_STUDIO_ALLOWED_ORIGINS: ${VOICE_STUDIO_ALLOWED_ORIGINS:-http://127.0.0.1:8765,http://localhost:8765}
+      VOICE_STUDIO_GATEWAY_KEY: ${VOICE_STUDIO_GATEWAY_KEY:?Set VOICE_STUDIO_GATEWAY_KEY in .env}
+      VOICE_STUDIO_DASHSCOPE_API_KEY: ${VOICE_STUDIO_DASHSCOPE_API_KEY:-}
+      VOICE_STUDIO_VOLCENGINE_API_KEY: ${VOICE_STUDIO_VOLCENGINE_API_KEY:-}
+      VOICE_STUDIO_VOLCENGINE_OPENAPI_ACCESS_KEY: ${VOICE_STUDIO_VOLCENGINE_OPENAPI_ACCESS_KEY:-}
+      VOICE_STUDIO_VOLCENGINE_OPENAPI_SECRET_KEY: ${VOICE_STUDIO_VOLCENGINE_OPENAPI_SECRET_KEY:-}
+      VOICE_STUDIO_VOLCENGINE_PROJECT_NAME: ${VOICE_STUDIO_VOLCENGINE_PROJECT_NAME:-}
+      VOICE_STUDIO_MINIMAX_API_KEY: ${VOICE_STUDIO_MINIMAX_API_KEY:-}
+      VOICE_STUDIO_MIMO_API_KEY: ${VOICE_STUDIO_MIMO_API_KEY:-}
+      VOICE_STUDIO_MAX_CONCURRENT_SYNTHESIS: ${VOICE_STUDIO_MAX_CONCURRENT_SYNTHESIS:-4}
+      VOICE_STUDIO_MCP_ENABLED: ${VOICE_STUDIO_MCP_ENABLED:-true}
+      VOICE_STUDIO_MCP_MAX_AUDIO_BYTES: ${VOICE_STUDIO_MCP_MAX_AUDIO_BYTES:-15728640}
+    volumes:
+      - voice-hub-data:/app/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,noexec,nosuid
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/api/summary', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
+volumes:
+  voice-hub-data:
+    name: voice-hub-data

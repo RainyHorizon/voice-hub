@@ -16,6 +16,7 @@ import {
 import { api, responseError } from "../api";
 import { HistoryAudioButton } from "../components/HistoryAudioButton";
 import { WorkspaceHero } from "../components/WorkspaceHero";
+import { useConfirm } from "../components/feedback/ConfirmProvider";
 import { useStudio } from "../context/StudioContext";
 import type { Job } from "../types";
 import { formatBytes } from "../utils";
@@ -173,6 +174,7 @@ function historyGroupLabel(key: string) {
 
 export function HistoryPage() {
   const { jobs, voices, refreshJobs: onRefresh } = useStudio();
+  const confirm = useConfirm();
   const [dateFilter, setDateFilter] = useState<HistoryFilter>({ kind: "all" });
   const [batchMode, setBatchMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -255,7 +257,13 @@ export function HistoryPage() {
   const deleteSelected = async () => {
     const ids = selectedJobs.map((job) => job.id);
     if (!ids.length) return setMessage("请先选择要删除的任务");
-    if (!window.confirm(`确定删除选中的 ${ids.length} 条任务及对应音频吗？此操作不可撤销。`)) return;
+    const accepted = await confirm({
+      title: `删除选中的 ${ids.length} 条任务？`,
+      description: "对应音频也会永久删除，此操作不可撤销。",
+      confirmLabel: "删除任务",
+      destructive: true,
+    });
+    if (!accepted) return;
     setWorking(true);
     try {
       const result = await api<{ message: string; freed_bytes: number }>("/api/jobs/delete", {
@@ -274,7 +282,13 @@ export function HistoryPage() {
     }
   };
   const deleteOne = async (job: Job) => {
-    if (!window.confirm(`确定删除这条任务及对应音频吗？此操作不可撤销。`)) return;
+    const accepted = await confirm({
+      title: "删除这条任务？",
+      description: "对应音频也会永久删除，此操作不可撤销。",
+      confirmLabel: "删除任务",
+      destructive: true,
+    });
+    if (!accepted) return;
     setWorking(true);
     try {
       const result = await api<{ message: string; freed_bytes: number }>(`/api/jobs/${job.id}`, { method: "DELETE" });

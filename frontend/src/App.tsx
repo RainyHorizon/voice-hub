@@ -1,5 +1,4 @@
 import {
-  Activity,
   AudioLines,
   ChevronLeft,
   ChevronRight,
@@ -9,9 +8,10 @@ import {
   Mic2,
   Settings2,
   WandSparkles,
-  X,
 } from "lucide-react";
 import { useEffect, useState, type ComponentType } from "react";
+import { Toaster } from "sonner";
+import { ConfirmProvider } from "./components/feedback/ConfirmProvider";
 import { StudioProvider, useStudio } from "./context/StudioContext";
 import { ClonePage } from "./pages/ClonePage";
 import { DesignPage } from "./pages/DesignPage";
@@ -48,13 +48,6 @@ function AppShell() {
     setActive,
     sidebarCollapsed,
     setSidebarCollapsed,
-    notice,
-    updateUrl,
-    updateAvailable,
-    updateInstallable,
-    updateInstalling,
-    installUpdate,
-    setNotice,
   } = useStudio();
   const [visited, setVisited] = useState<Set<string>>(() => new Set([active]));
 
@@ -112,19 +105,6 @@ function AppShell() {
         <header className="topbar visually-hidden">
           <h1>{titleFor(active)}</h1>
         </header>
-        {notice && (
-          <div className="notice" role="status" aria-live="polite" aria-atomic="true">
-            <Activity size={15} />
-            {notice}
-            {updateAvailable && notice.startsWith("发现 Voice Hub") && <>
-              {updateInstallable && <button type="button" className="notice-update" onClick={() => void installUpdate()} disabled={updateInstalling}>{updateInstalling ? "更新中…" : "立即更新"}</button>}
-              <a href={updateUrl} target="_blank" rel="noreferrer">打开 Release</a>
-            </>}
-            <button type="button" onClick={() => setNotice("")} title="关闭提示" aria-label="关闭提示">
-              <X size={14} />
-            </button>
-          </div>
-        )}
         {nav.map((item) => {
           if (!visited.has(item.id) && active !== item.id) return null;
           const Page = pages[item.id];
@@ -141,8 +121,17 @@ function AppShell() {
 
 export default function App() {
   return (
-    <StudioProvider>
-      <AppShell />
-    </StudioProvider>
+    <ConfirmProvider>
+      <StudioProvider>
+        <AppShell />
+      </StudioProvider>
+      <Toaster
+        theme="light"
+        position="top-right"
+        closeButton
+        richColors
+        toastOptions={{ className: "voice-hub-toast" }}
+      />
+    </ConfirmProvider>
   );
 }

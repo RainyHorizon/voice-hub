@@ -103,6 +103,9 @@ Write-Host "正在生成 VoiceHub.exe..." -ForegroundColor Cyan
   --paths $backendRoot `
   --collect-all keyring `
   --collect-all dashscope `
+  --collect-all mcp `
+  --collect-all mcp_types `
+  --collect-all yaml `
   --collect-submodules uvicorn `
   --collect-submodules websockets `
   --distpath $pyinstallerDist `
@@ -119,6 +122,7 @@ Move-Item -LiteralPath $builtApplication -Destination $stagePath
 
 New-Item -ItemType Directory -Force -Path (Join-Path $stagePath "frontend") | Out-Null
 Copy-Item -LiteralPath (Join-Path $frontendRoot "dist") -Destination (Join-Path $stagePath "frontend\dist") -Recurse
+Copy-Item -LiteralPath (Join-Path $projectRoot "skills") -Destination (Join-Path $stagePath "skills") -Recurse
 New-Item -ItemType Directory -Force -Path (Join-Path $stagePath "data\audio") | Out-Null
 New-Item -ItemType File -Force -Path (Join-Path $stagePath "data\audio\.gitkeep") | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $stagePath "tools") | Out-Null
@@ -126,6 +130,7 @@ Copy-Item -LiteralPath $ffmpeg -Destination (Join-Path $stagePath "tools\ffmpeg.
 Copy-Item -LiteralPath $ffprobe -Destination (Join-Path $stagePath "tools\ffprobe.exe")
 Copy-Item -LiteralPath (Join-Path $projectRoot "portable\启动 Voice Hub.bat") -Destination (Join-Path $stagePath "启动 Voice Hub.bat")
 Copy-Item -LiteralPath (Join-Path $projectRoot "portable\停止 Voice Hub.bat") -Destination (Join-Path $stagePath "停止 Voice Hub.bat")
+Copy-Item -LiteralPath (Join-Path $projectRoot "voicehub.cmd") -Destination (Join-Path $stagePath "voicehub.cmd")
 Copy-Item -LiteralPath (Join-Path $projectRoot "更新 Voice Hub.bat") -Destination (Join-Path $stagePath "更新 Voice Hub.bat")
 Copy-Item -LiteralPath (Join-Path $projectRoot "stop.ps1") -Destination (Join-Path $stagePath "stop.ps1")
 Copy-Item -LiteralPath (Join-Path $projectRoot "update.ps1") -Destination (Join-Path $stagePath "update.ps1")
@@ -164,6 +169,8 @@ if ($forbiddenFiles) {
 Write-Host "正在检查便携版..." -ForegroundColor Cyan
 & (Join-Path $stagePath "VoiceHub.exe") --check --no-browser
 if ($LASTEXITCODE -ne 0) { throw "便携版运行检查失败。" }
+& (Join-Path $stagePath "VoiceHub.exe") cli --help
+if ($LASTEXITCODE -ne 0) { throw "便携版 CLI 检查失败。" }
 
 if (Test-Path -LiteralPath $archivePath) { Remove-Item -LiteralPath $archivePath -Force }
 Compress-Archive -LiteralPath $stagePath -DestinationPath $archivePath -CompressionLevel Optimal

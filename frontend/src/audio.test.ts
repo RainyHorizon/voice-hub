@@ -42,4 +42,17 @@ describe("createExclusiveAudioController", () => {
 
     expect(pauseCount).toBe(0);
   });
+
+  it("does not pause an audio after it has been released", () => {
+    const controller = createExclusiveAudioController();
+    let firstPauseCount = 0;
+    const first = { pause: () => { firstPauseCount += 1; } };
+    const second = { pause: () => undefined };
+
+    controller.activate(first);
+    controller.release(first);
+    controller.activate(second);
+
+    expect(firstPauseCount).toBe(0);
+  });
 });

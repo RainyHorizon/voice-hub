@@ -42,6 +42,7 @@ def list_voices():
     return [
         {
             **dict(row),
+            "api_voice_id": row["provider_voice_id"] or row["public_name"],
             "languages": json.loads(row["languages"]),
             "preview_url": f"/api/voices/{row['id']}/preview" if row["preview_asset"] else None,
         }

@@ -16,5 +16,6 @@ export function createExclusiveAudioController() {
   };
 }
 
-// History rows are kept mounted while users filter or change pages, so they share one player.
-export const historyAudioController = createExclusiveAudioController();
+// The global player bar, inline previews and history rows share one controller,
+// so starting any of them pauses whatever else is playing.
+export const appAudioController = createExclusiveAudioController();

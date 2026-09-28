@@ -11,10 +11,10 @@ API Key、音频、任务历史和音色信息默认保存在本机，不会上�
 | 语音合成 | 按厂商、模型和音色生成语音，支持试听与下载 |
 | 声音克隆 | 上传已获授权的参考音频，创建可复用音色 |
 | 声音设计 | 用文字描述声音特征并生成试听音色 |
-| 音色库 | 按厂商筛选，管理预置、导入、克隆和设计音色 |
+| 音色库 | 按厂商筛选音色，单行查看可复制的真实 Voice ID、模型名称、模型 ID、类型与语言 |
 | 任务历史 | 查看生成记录，下载音频和文字，批量导出 ZIP 或删除记录 |
 | 存储策略 | 设置音频保留天数、容量上限和自动清理周期 |
-| API 网关 | 提供 OpenAI 兼容的模型、语音合成和 SSE 流式接口 |
+| API 网关 | 提供 OpenAI 兼容的模型、语音合成和 SSE 流式接口；模型别名在设置中统一管理 |
 | 运行诊断 | 查看 Python、FFmpeg、凭据存储和前端状态 |
 
 声音克隆和声音设计只能用于你已经获得授权的声音或描述，并应遵守相关法律及厂商条款。
@@ -100,6 +100,80 @@ chmod +x start.sh
 
 项目 CI 会在真实 macOS Runner 上读写并删除一条临时 Keychain 凭据，也会在 Ubuntu Runner 的临时 D-Bus 会话中验证 GNOME Keyring/Secret Service。该检查覆盖系统密钥环适配路径，但无法代替用户电脑上的桌面会话、锁屏状态和钱包解锁验证；遇到诊断异常时仍应在实际安装环境运行一次设置页检查。
 
+## 命令行工具
+
+先启动 Voice Hub，再在程序或源码根目录打开 PowerShell。Windows 便携版、安装版和轻量版均可使用同一入口：
+
+```powershell
+.\voicehub.cmd doctor
+```
+
+常用命令：
+
+```powershell
+.\voicehub.cmd models
+```
+
+```powershell
+.\voicehub.cmd voices --model tts-default --language zh-CN
+```
+
+```powershell
+.\voicehub.cmd speak "你好，这是 Voice Hub 命令行生成的语音。" --model tts-default --voice mimo-default --output .\voice.mp3
+```
+
+```powershell
+.\voicehub.cmd jobs --limit 10
+```
+
+```powershell
+.\voicehub.cmd download job_123456789abc --output .\history.mp3
+```
+
+本机调用会从正在运行的本机服务安全读取 Gateway Key，不需要把 Key 写进命令历史。`voice` 应填写 `voices` 命令显示的“调用名称”，不是随意填写的显示名称。默认不会覆盖已有输出文件；确实需要覆盖时添加 `--force`。
+
+所有命令均支持放在子命令之前的 `--json`，方便 PowerShell 或其他程序处理：
+
+```powershell
+.\voicehub.cmd --json models
+```
+
+远程调用时应使用 HTTPS，并在当前 PowerShell 会话设置 CLI 专用环境变量：
+
+```powershell
+$env:VOICE_HUB_BASE_URL = "https://voice.example.com"
+$env:VOICE_HUB_API_KEY = "<Gateway Key>"
+.\voicehub.cmd doctor
+```
+
+`VOICE_HUB_API_KEY` 是 Voice Hub Gateway Key，不是厂商 API Key。环境变量仅用于 CLI 客户端，不会取代服务器上的 `VOICE_STUDIO_GATEWAY_KEY`。不要把真实 Key 写进脚本、README 或 Git 仓库。完整参数可运行 `.\voicehub.cmd --help` 查看。
+
+## MCP 与 Agent Skill
+
+Voice Hub 在同一个服务和端口提供 Streamable HTTP MCP：
+
+```text
+http://127.0.0.1:8765/mcp
+```
+
+不需要额外开放端口。MCP 提供以下工具：
+
+| 工具 | 用途 |
+| --- | --- |
+| `get_voice_hub_status` | 检查版本、模型、音色和已配置厂商状态 |
+| `list_tts_models` | 查询模型和 `tts-default`、`tts-fast`、`tts-hq` 的实际绑定 |
+| `list_voices` | 按模型查询兼容音色，避免 Agent 猜测音色 ID |
+| `create_speech` | 调用远程厂商生成语音，可能产生费用 |
+| `list_recent_speech_jobs` | 查询最近任务 |
+| `get_speech_job` | 查询单个任务元数据 |
+| `get_speech_audio` | 读取未超过 MCP 大小上限的历史音频 |
+
+仓库同时包含 `skills/voice-hub-tts`。支持 MCP Skills 扩展的 Agent 可以通过 `skills/list`、`skills/get` 和 `resources/read` 扫描导入；导入后是静态快照，Voice Hub 升级了 Skill 时需要在客户端重新扫描工具。没有 MCP 连接时，Skill 会改用上面的 CLI 工作流。
+
+`create_speech` 只有在用户明确要求生成音频时才应调用。默认返回 MP3；单个 MCP 音频默认最多 15 MB，超过上限时任务仍保存在 Voice Hub，可改用 CLI 的 `download` 或 WebUI 下载。上限可用 `VOICE_STUDIO_MCP_MAX_AUDIO_BYTES` 调整。
+
+MCP 当前面向个人私有部署，没有实现面向公网插件所需的 OAuth。服务器上应继续保持 `127.0.0.1:8765` 绑定，通过 Secure MCP Tunnel、SSH 隧道或其他受控私有通道连接到 `http://127.0.0.1:8765/mcp`；不要直接把 `/mcp`、`/api` 或 `8765` 暴露到互联网。
+
 ## 更新
 
 | 当前安装方式 | 更新入口 | 更新来源 |
@@ -145,6 +219,8 @@ docker compose logs -f voice-hub
 
 默认地址为 `http://127.0.0.1:8765`。停止服务但保留 `data` 数据：
 
+MCP 与 WebUI 共用该地址，MCP URL 为 `http://127.0.0.1:8765/mcp`。
+
 ```bash
 docker compose down
 ```
@@ -159,6 +235,8 @@ docker compose up -d --no-build
 如果使用本地源码构建镜像，则先更新 Git 源码，再执行 `docker compose up -d --build`。`./data` 挂载目录和 `.env` 不会被镜像更新覆盖。
 
 正式版本镜像发布到 `ghcr.io/rainyhorizon/voice-hub`。例如 `v1.7.0` 对应 `ghcr.io/rainyhorizon/voice-hub:1.7.0`、`ghcr.io/rainyhorizon/voice-hub:v1.7.0` 和 `ghcr.io/rainyhorizon/voice-hub:latest`。
+
+使用 1Panel 的服务器可以直接采用仓库中的 `deploy/1panel/compose.yml`。首次创建编排、持久化目录、HTTPS 安全边界、升级和回滚步骤见 [1Panel 部署指南](docs/1PANEL.md)。长期运行推荐固定版本标签；GitHub 发布新版本不会自动替换正在运行的容器，需要先备份 `data`，再拉取新标签并重新创建容器。
 
 首次使用本地源码构建镜像：
 
@@ -201,6 +279,8 @@ Docker 可用变量：
 | `VOICE_STUDIO_MINIMAX_API_KEY` | MiniMax API Key |
 | `VOICE_STUDIO_MIMO_API_KEY` | 小米 MiMo API Key |
 | `VOICE_STUDIO_MAX_CONCURRENT_SYNTHESIS` | 同时生成语音的上限，默认 4，最大 32 |
+| `VOICE_STUDIO_MCP_ENABLED` | 是否启用 `/mcp`，默认 `true` |
+| `VOICE_STUDIO_MCP_MAX_AUDIO_BYTES` | MCP 单次返回的最大音频字节数，默认 `15728640`（15 MB） |
 
 火山引擎的语音 API Key 与云端音色同步使用的 Access Key/Secret Key 是两组不同凭据。不使用云端音色同步时，后两项可以留空。桌面版只需配置一套火山凭据，然后在 **设置 → 火山引擎 → 项目** 中点击“同步项目与密钥”；程序会用 AK/SK 读取每个项目已有的语音 API Key，并将密钥本体保存到系统密钥环。之后声音克隆、云端音色同步和空槽位查询都会按所选项目执行，不需要为每个项目重复添加账号。没有 IAM 项目读取权限时，也可以手动添加 `ProjectName`，但需要在控制台为该项目创建 API Key 后再同步。`.env` 只保存在本机，不要提交到 GitHub。
 
@@ -226,7 +306,7 @@ Authorization: Bearer <Gateway Key>
 | `/v1/audio/speech` | `POST` | 生成完整音频 |
 | `/v1/audio/speech/stream` | `POST` | 通过 SSE 接收音频分片 |
 
-`model` 可以填写 API 网关页面显示的完整模型 ID，也可以使用 `tts-default`、`tts-fast` 或 `tts-hq`。`voice` 必须与所选模型兼容。
+`model` 可以填写音色库显示的短模型 ID（例如 `seed-icl-2.0`）、带厂商前缀的完整模型 ID（例如 `volcengine/seed-icl-2.0`），也可以使用 `tts-default`、`tts-fast` 或 `tts-hq`。短模型 ID 仅在能够唯一对应一个厂商模型时生效；固定别名的实际绑定在 **设置 → 默认模型** 中管理。`voice` 必须与所选模型兼容，可在 **音色库 → Voice ID** 列复制后端明确返回的 `api_voice_id`。该值通常就是厂商真实 Voice ID；对于厂商不提供永久 Voice ID 的特殊模型，Voice Hub 会回退到稳定的兼容别名。
 
 ### Python SDK
 
@@ -296,7 +376,7 @@ PCM 是不带文件头的原始音频数据，浏览器通常无法直接播放�
 
 | 层级 | 技术 |
 | --- | --- |
-| 前端 | React、TypeScript、Vite |
+| 前端 | React、TypeScript、Vite、原生 CSS、Lucide、Sonner |
 | 后端 | FastAPI、Python |
 | 本地数据 | SQLite、文件系统 |
 | 厂商连接 | HTTP、WebSocket |
@@ -309,6 +389,7 @@ PCM 是不带文件头的原始音频数据，浏览器通常无法直接播放�
 
 - [API 参考](docs/API.md)
 - [架构说明](docs/ARCHITECTURE.md)
+- [1Panel 部署指南](docs/1PANEL.md)
 
 ## 开发与测试
 
@@ -326,6 +407,22 @@ python -m pip install -r requirements.txt
 python -m pip install pytest==8.3.5
 python -m pytest -q tests
 ```
+
+### 前端字体
+
+前端字体全部离线打包，运行时不会请求任何外部字体服务：
+
+- 等宽字体 JetBrains Mono 来自 npm 包 `@fontsource-variable/jetbrains-mono`，`npm ci` 后即可使用。
+- 中文字体 HarmonyOS Sans SC 不随仓库提供。需要时请从 [华为开发者网站](https://developer.huawei.com/consumer/cn/design/resource/) 下载，阅读并接受许可协议后，把 `HarmonyOS_Sans_SC_Regular.ttf`、`HarmonyOS_Sans_SC_Medium.ttf`、`HarmonyOS_Sans_SC_Bold.ttf` 放入 `frontend/fonts-src/`（已被 Git 忽略），然后运行：
+
+```powershell
+Set-Location frontend
+npm run fonts:build
+```
+
+脚本会把字体切成带 `unicode-range` 的 woff2 分片，输出到 `frontend/src/assets/fonts/harmonyos-sans/`，浏览器只下载页面实际用到的字符。没有生成分片时界面会回退到系统字体（苹方、微软雅黑等），`npm run build` 不受影响。
+
+`fonts:build` 依赖 `cn-font-split` 的原生库，`npm` 安装时会自动下载。如果因网络原因下载失败，可以运行 `npx cn-font-split i default` 重试，或从 [cn-font-split Release](https://github.com/KonghaYao/cn-font-split/releases) 手动下载对应平台的库文件，并用环境变量 `CN_FONT_SPLIT_BIN` 指向它。
 
 测试不会调用真实厂商 API。真实语音测试可能产生费用或消耗额度，请先确认账号权限和计费规则。
 

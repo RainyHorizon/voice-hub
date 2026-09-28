@@ -20,6 +20,29 @@
 
 便携版已包含 Python 运行时、后端依赖、前端文件、FFmpeg 和 FFprobe，不需要另外安装 Python、Node.js 或 FFmpeg。
 
+## 命令行工具
+
+先启动 Voice Hub，然后在便携版目录打开 PowerShell：
+
+```powershell
+.\voicehub.cmd doctor
+.\voicehub.cmd models
+.\voicehub.cmd voices --model tts-default
+.\voicehub.cmd speak "你好" --voice mimo-default --output .\voice.mp3
+```
+
+本机调用会自动读取正在运行服务的 Gateway Key。运行 `.\voicehub.cmd --help` 可以查看全部命令和参数。
+
+## MCP
+
+启动便携版后，同一端口会提供 MCP：
+
+```text
+http://127.0.0.1:8765/mcp
+```
+
+如果程序自动改用了其他端口，请把 URL 中的 `8765` 换成启动窗口显示的实际端口。便携包已包含 `voice-hub-tts` Skill，支持 Skills 扩展的 Agent 可以扫描导入。MCP 只适合本机或受控私有通道，不要把该端口直接开放到公网。
+
 ## 数据位置
 
 数据库、生成音频和网关配置保存在程序目录的 `data` 文件夹。自动更新会保留这个文件夹；手动升级时也请保留它。卸载时可以直接删除整个程序目录。

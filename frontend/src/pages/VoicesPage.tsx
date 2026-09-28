@@ -42,16 +42,16 @@ export function VoicesPage() {
   const [scope, setScope] = useState<"all" | "mine">("all");
   const [showImport, setShowImport] = useState(false);
   const [renameTarget, setRenameTarget] = useState<Voice | null>(null);
-  const [copiedSpeakerId, setCopiedSpeakerId] = useState("");
-  const copySpeakerId = async (voice: Voice) => {
-    const speakerId = voice.provider_voice_id?.trim();
-    if (!speakerId) return;
+  const [copiedId, setCopiedId] = useState("");
+  const copyId = async (key: string, value: string) => {
+    const id = value.trim();
+    if (!id) return;
     try {
-      await navigator.clipboard.writeText(speakerId);
-      setCopiedSpeakerId(voice.id);
-      window.setTimeout(() => setCopiedSpeakerId(""), 1600);
+      await navigator.clipboard.writeText(id);
+      setCopiedId(key);
+      window.setTimeout(() => setCopiedId(""), 1600);
     } catch {
-      setCopiedSpeakerId("");
+      setCopiedId("");
     }
   };
   const scoped = scope === "mine"
@@ -112,14 +112,19 @@ export function VoicesPage() {
       />
       <div className="voice-table">
         <div className="table-head">
-          <span>音色</span>
-          <span>来源 / 模型</span>
-          <span>类型</span>
-          <span>语言</span>
-          <span />
+          <span className="voice-name-column">音色</span>
+          <span className="voice-api-id-column">Voice ID</span>
+          <span className="voice-model-column">模型</span>
+          <span className="voice-model-id-column">模型 ID</span>
+          <span className="voice-type-column">类型</span>
+          <span className="voice-languages-column">语言</span>
+          <span className="voice-actions-column" />
         </div>
         {filtered.length ? (
-          filtered.map((item) => (
+          filtered.map((item) => {
+            const model = models.find((candidate) => candidate.provider === item.provider && candidate.model_id === item.model_id);
+            const apiVoiceId = item.api_voice_id?.trim() || item.provider_voice_id?.trim() || item.public_name.trim();
+            return (
             <div className="voice-row" key={item.id}>
               <div className="voice-name">
                 <div className="voice-wave">
@@ -129,32 +134,36 @@ export function VoicesPage() {
                   <span />
                   <span />
                 </div>
-                <div>
-                  <strong>{item.display_name}</strong>
-                  {item.provider === "volcengine" && item.voice_type !== "preset" && item.provider_voice_id && (
-                    <span className="voice-speaker-id">
-                      <span>Speaker ID</span>
-                      <code title={item.provider_voice_id}>{item.provider_voice_id}</code>
-                      <button
-                        className="voice-speaker-copy"
-                        type="button"
-                        title={copiedSpeakerId === item.id ? "已复制 Speaker ID" : "复制 Speaker ID"}
-                        aria-label={`${copiedSpeakerId === item.id ? "已复制" : "复制"} ${item.provider_voice_id}`}
-                        onClick={() => void copySpeakerId(item)}
-                      >
-                        {copiedSpeakerId === item.id ? <Check size={13} /> : <Copy size={13} />}
-                      </button>
-                    </span>
-                  )}
-                </div>
+                <strong title={item.display_name}>{item.display_name}</strong>
               </div>
-              <div>
-                <strong>
-                  {providerMeta[item.provider]?.label || item.provider}
-                </strong>
-                <small>{item.model_id}</small>
+              <div className="voice-api-id">
+                <code title={apiVoiceId}>{apiVoiceId}</code>
+                <button
+                  className="voice-id-copy"
+                  type="button"
+                  title={copiedId === `voice:${item.id}` ? "已复制 Voice ID" : "复制 API 请求中的 Voice ID"}
+                  aria-label={`${copiedId === `voice:${item.id}` ? "已复制" : "复制"} Voice ID ${apiVoiceId}`}
+                  onClick={() => void copyId(`voice:${item.id}`, apiVoiceId)}
+                >
+                  {copiedId === `voice:${item.id}` ? <Check size={14} /> : <Copy size={14} />}
+                </button>
               </div>
-              <span className="type-text">
+              <div className="voice-model">
+                <strong title={model?.display_name || item.model_id}>{model?.display_name || item.model_id}</strong>
+              </div>
+              <div className="voice-model-id">
+                <code title={item.model_id}>{item.model_id}</code>
+                <button
+                  className="voice-id-copy"
+                  type="button"
+                  title={copiedId === `model:${item.id}` ? "已复制模型 ID" : "复制 API 请求中的模型 ID"}
+                  aria-label={`${copiedId === `model:${item.id}` ? "已复制" : "复制"}模型 ID ${item.model_id}`}
+                  onClick={() => void copyId(`model:${item.id}`, item.model_id)}
+                >
+                  {copiedId === `model:${item.id}` ? <Check size={14} /> : <Copy size={14} />}
+                </button>
+              </div>
+              <span className="type-text voice-type">
                 {item.voice_type === "cloned"
                   ? "克隆"
                   : item.voice_type === "imported"
@@ -163,7 +172,7 @@ export function VoicesPage() {
                       ? "设计"
                     : "预置"}
               </span>
-              <span>{item.languages.join(" · ")}</span>
+              <span className="voice-languages">{item.languages.join(" · ")}</span>
               <div className="voice-actions">
                 <button className="voice-use-button" onClick={() => selectVoice(item)}>使用</button>
                 {item.voice_type !== "preset" ? <button
@@ -184,7 +193,8 @@ export function VoicesPage() {
                 </button>
               </div>
             </div>
-          ))
+            );
+          })
         ) : (
           <div className="empty-state">
             <Library size={21} />

@@ -54,3 +54,18 @@ TRUSTED_HOSTS.extend(
     for host in os.getenv("VOICE_STUDIO_ALLOWED_HOSTS", "").split(",")
     if host.strip()
 )
+
+
+def _environment_flag(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+MCP_ENABLED = _environment_flag("VOICE_STUDIO_MCP_ENABLED", True)
+try:
+    MCP_MAX_AUDIO_BYTES = int(os.getenv("VOICE_STUDIO_MCP_MAX_AUDIO_BYTES", str(15 * 1024 * 1024)))
+except ValueError:
+    MCP_MAX_AUDIO_BYTES = 15 * 1024 * 1024
+MCP_MAX_AUDIO_BYTES = max(1024 * 1024, min(MCP_MAX_AUDIO_BYTES, 100 * 1024 * 1024))

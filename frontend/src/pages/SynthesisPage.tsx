@@ -6,6 +6,7 @@ import {
   Sparkles,
   Volume2,
 } from "lucide-react";
+import { ExclusiveAudio } from "../components/ExclusiveAudio";
 import { WorkspaceHero } from "../components/WorkspaceHero";
 import { useStudio } from "../context/StudioContext";
 import { credentialProviderIds, providerMeta, sample, voiceMatchesModel } from "../utils";
@@ -133,7 +134,7 @@ export function SynthesisPage() {
       {p.audioUrl && (
         <div className="player latest-player">
           <div className="player-icon"><Volume2 size={20} /></div>
-          <div className="player-main"><div className="player-title"><strong>刚刚生成</strong><span>{p.selectedVoice?.display_name || p.voice} · {p.format.toUpperCase()}</span></div><p className="player-text">{p.text}</p><audio controls src={p.audioUrl} /></div>
+          <div className="player-main"><div className="player-title"><strong>刚刚生成</strong><span>{p.selectedVoice?.display_name || p.voice} · {p.format.toUpperCase()}</span></div><p className="player-text">{p.text}</p><ExclusiveAudio controls src={p.audioUrl} /></div>
           <a className="download-button" href={p.audioUrl} download={"voice-hub." + p.format} title="下载"><Download size={17} /></a>
         </div>
       )}

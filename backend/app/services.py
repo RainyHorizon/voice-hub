@@ -43,9 +43,13 @@ def resolve_model(model_id: str):
                 "SELECT model_id FROM gateway_model_aliases WHERE alias=?", (model_id,)
             ).fetchone()
         target = row["model_id"] if row else model_id
-    for model in available_models():
+    models = available_models()
+    for model in models:
         if model.gateway_id == target:
             return model
+    short_matches = [model for model in models if model.model_id == target]
+    if len(short_matches) == 1:
+        return short_matches[0]
     return None
 
 

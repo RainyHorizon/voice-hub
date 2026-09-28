@@ -11,6 +11,7 @@ import {
   KeyRound,
   Plus,
   RefreshCw,
+  Route,
   Save,
   ShieldCheck,
   Trash2,
@@ -18,7 +19,9 @@ import {
 } from "lucide-react";
 import { api } from "../api";
 import { ProviderSelector } from "../components/ProviderSelector";
+import { ModelAliasSettings } from "../components/ModelAliasSettings";
 import { WorkspaceHero } from "../components/WorkspaceHero";
+import { useConfirm } from "../components/feedback/ConfirmProvider";
 import { handleTabListKeyDown } from "../components/tabs";
 import { useStudio } from "../context/StudioContext";
 import { useDialogAccessibility } from "../hooks/useDialogAccessibility";
@@ -37,7 +40,7 @@ import { credentialProviderIds, formatBytes, providerMeta } from "../utils";
 
 export function SettingsPage() {
   const { models, refreshJobs: onJobsChanged } = useStudio();
-  const [section, setSection] = useState<"providers" | "storage" | "environment">("providers");
+  const [section, setSection] = useState<"providers" | "aliases" | "storage" | "environment">("providers");
   return (
     <section className="page-section settings-shell">
       <WorkspaceHero
@@ -47,10 +50,12 @@ export function SettingsPage() {
       />
       <div className="settings-navigation" role="tablist" aria-label="设置分类" onKeyDown={handleTabListKeyDown}>
         <button id="settings-tab-providers" className={section === "providers" ? "selected" : ""} type="button" role="tab" aria-controls="settings-panel-providers" aria-selected={section === "providers"} tabIndex={section === "providers" ? 0 : -1} onClick={() => setSection("providers")}><KeyRound size={18} />厂商账号</button>
+        <button id="settings-tab-aliases" className={section === "aliases" ? "selected" : ""} type="button" role="tab" aria-controls="settings-panel-aliases" aria-selected={section === "aliases"} tabIndex={section === "aliases" ? 0 : -1} onClick={() => setSection("aliases")}><Route size={18} />默认模型</button>
         <button id="settings-tab-storage" className={section === "storage" ? "selected" : ""} type="button" role="tab" aria-controls="settings-panel-storage" aria-selected={section === "storage"} tabIndex={section === "storage" ? 0 : -1} onClick={() => setSection("storage")}><HardDrive size={18} />存储与清理</button>
         <button id="settings-tab-environment" className={section === "environment" ? "selected" : ""} type="button" role="tab" aria-controls="settings-panel-environment" aria-selected={section === "environment"} tabIndex={section === "environment" ? 0 : -1} onClick={() => setSection("environment")}><ShieldCheck size={18} />运行环境</button>
       </div>
       {section === "providers" && <ProviderSettings models={models} panelId="settings-panel-providers" labelledBy="settings-tab-providers" />}
+      {section === "aliases" && <ModelAliasSettings models={models} panelId="settings-panel-aliases" labelledBy="settings-tab-aliases" />}
       {section === "storage" && <StorageSettings onJobsChanged={onJobsChanged} panelId="settings-panel-storage" labelledBy="settings-tab-storage" />}
       {section === "environment" && <EnvironmentSettings panelId="settings-panel-environment" labelledBy="settings-tab-environment" />}
     </section>
@@ -322,6 +327,7 @@ function StorageSettings({ onJobsChanged, panelId, labelledBy }: { onJobsChanged
 }
 
 function ProviderSettings({ models, panelId, labelledBy }: { models: Model[]; panelId?: string; labelledBy?: string }) {
+  const confirm = useConfirm();
   const [specs, setSpecs] = useState<Record<string, ProviderSpec>>({});
   const [accounts, setAccounts] = useState<ProviderAccount[]>([]);
   const [provider, setProvider] = useState("dashscope");
@@ -501,7 +507,14 @@ function ProviderSettings({ models, panelId, labelledBy }: { models: Model[]; pa
     }
   };
   const removeProject = async (project: ProviderProject) => {
-    if (!editingId || !window.confirm(`删除项目“${project.display_name}”？`)) return;
+    if (!editingId) return;
+    const accepted = await confirm({
+      title: `删除项目“${project.display_name}”？`,
+      description: "只会从 Voice Hub 的本地项目列表中移除，不会删除火山引擎中的远端项目。",
+      confirmLabel: "删除项目",
+      destructive: true,
+    });
+    if (!accepted) return;
     setProjectsWorking(true);
     try {
       await api(`/api/provider-accounts/${encodeURIComponent(editingId)}/projects/${encodeURIComponent(project.id)}`, { method: "DELETE" });
@@ -523,11 +536,14 @@ function ProviderSettings({ models, panelId, labelledBy }: { models: Model[]; pa
     }
   };
   const remove = async () => {
-    if (
-      !editingId ||
-      !window.confirm("删除这个账号及其系统密钥环中的凭据？")
-    )
-      return;
+    if (!editingId) return;
+    const accepted = await confirm({
+      title: "删除这个厂商账号？",
+      description: "账号配置及系统密钥环中的对应凭据会一并删除。",
+      confirmLabel: "删除账号",
+      destructive: true,
+    });
+    if (!accepted) return;
     setWorking(true);
     try {
       await api("/api/provider-accounts/" + editingId, { method: "DELETE" });

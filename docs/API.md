@@ -15,6 +15,48 @@ Authorization: Bearer <Gateway Key>
 
  Gateway Key 可在网页的“API 网关”页面查看或轮换。`GET /api/gateway` 默认只返回脱敏提示；只有本机可信网页明确请求 `?reveal=true` 时才返回完整 Key。远程部署不要依赖该接口自动获取密钥。不要把厂商 API Key 放入客户端请求；网关会在本机后端读取系统密钥环或 Docker 环境变量。
 
+## MCP
+
+Voice Hub 默认在同一端口提供 Streamable HTTP MCP：
+
+```text
+POST http://127.0.0.1:8765/mcp
+```
+
+该端点使用 MCP JSON-RPC/Streamable HTTP 协议，不是普通 REST 接口。应由 ChatGPT、Codex 或其他 MCP 客户端连接，不要用浏览器直接打开来判断是否正常。
+
+### 工具
+
+| 工具 | 只读 | 是否访问远程厂商 | 说明 |
+| --- | :---: | :---: | --- |
+| `get_voice_hub_status` | 是 | 否 | 返回版本、模型/音色数量和已配置厂商摘要 |
+| `list_tts_models` | 是 | 否 | 返回可合成模型及常用模型别名的实际目标 |
+| `list_voices` | 是 | 否 | 按模型或别名返回兼容音色的调用名称 |
+| `create_speech` | 否 | 是 | 生成语音并返回任务信息和音频，可能产生厂商费用 |
+| `list_recent_speech_jobs` | 是 | 否 | 返回最近任务，不暴露服务器文件路径 |
+| `get_speech_job` | 是 | 否 | 返回一个任务的元数据 |
+| `get_speech_audio` | 是 | 否 | 返回已保存且未超过大小上限的任务音频 |
+
+`create_speech` 的主要参数是 `text`、`voice`、`model`、`response_format`、`speed` 和 `instructions`。默认模型为 `tts-default`，默认格式为 `mp3`。Agent 应先调用 `list_tts_models` 和 `list_voices`，不能根据显示名称猜测音色调用 ID。
+
+音频通过 MCP `AudioContent` Base64 返回，同时在 `structuredContent` 中提供任务 ID、解析后的真实模型、音色、格式、大小和是否包含音频。默认上限为 15 MB；超过 `VOICE_STUDIO_MCP_MAX_AUDIO_BYTES` 时不会把大文件塞进 MCP 响应，应使用 CLI 或 WebUI 按任务 ID 下载。
+
+### Skills 扩展
+
+服务声明 `io.modelcontextprotocol/skills` 扩展并提供：
+
+| 方法 | 用途 |
+| --- | --- |
+| `skills/list` | 列出内置的 `voice-hub-tts` Skill 和资源摘要 |
+| `skills/get` | 按名称读取 Skill 描述符 |
+| `resources/read` | 读取 `SKILL.md` 与 CLI 参考文档 |
+
+Skill 资源使用 `skill://voice-hub-tts/...` URI，并带 SHA-256 摘要。客户端扫描导入后保存的是静态快照，服务器升级后需要重新扫描。
+
+### 安全边界
+
+当前 MCP 没有独立的公网 OAuth 登录，默认只适合环回地址、SSH/Tailscale 私有通道或 Secure MCP Tunnel。不要直接把 `8765` 或 `/mcp` 反向代理到公网；公开插件需要稳定 HTTPS、OAuth、访问控制和限流，这不在当前实现范围内。
+
 ## OpenAI 兼容接口
 
 ### `GET /v1/models`
@@ -23,7 +65,7 @@ Authorization: Bearer <Gateway Key>
 
 ### `GET /v1/models/{model_id}`
 
-查询单个模型。`model_id` 可以是完整模型 ID，也可以使用内置别名：
+查询单个模型。`model_id` 可以是带厂商前缀的完整模型 ID、能够唯一匹配的短模型 ID，也可以使用内置别名。例如 `volcengine/seed-icl-2.0` 与 `seed-icl-2.0` 都能定位到 Seed 声音复刻 2.0：
 
 | 别名 | 用途 |
 | --- | --- |
@@ -31,7 +73,7 @@ Authorization: Bearer <Gateway Key>
 | `tts-fast` | 低延迟模型 |
 | `tts-hq` | 高质量模型 |
 
-三个别名可以在网页的“API 网关 → 模型别名”区域修改，分别绑定到任意已配置且支持语音合成的模型。修改后立即生效；恢复默认会指向 `mimo/mimo-v2.5-tts`、`dashscope/qwen3-tts-flash`、`mimo/mimo-v2.5-tts`。也可以使用本地管理接口读取或修改：`GET /api/gateway/aliases`、`PUT /api/gateway/aliases/{alias}`、`POST /api/gateway/aliases/reset`。
+三个别名可以在网页的“设置 → 默认模型”区域修改，分别绑定到任意已配置且支持语音合成的模型。修改后立即生效；恢复默认会指向 `mimo/mimo-v2.5-tts`、`dashscope/qwen3-tts-flash`、`mimo/mimo-v2.5-tts`。也可以使用本地管理接口读取或修改：`GET /api/gateway/aliases`、`PUT /api/gateway/aliases/{alias}`、`POST /api/gateway/aliases/reset`。
 
 ### `POST /v1/audio/speech`
 
@@ -39,14 +81,16 @@ Authorization: Bearer <Gateway Key>
 
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | :---: | --- |
-| `model` | string | 是 | 模型 ID 或别名 |
-| `voice` | string | 是 | 与模型兼容的音色 ID/兼容别名 |
+| `model` | string | 是 | 唯一短模型 ID、完整 `provider/model` ID 或模型别名 |
+| `voice` | string | 是 | 与模型兼容的 `api_voice_id`；通常为厂商真实 Voice ID |
 | `input` | string | 是 | 待合成文本，最多 10000 字符 |
 | `response_format` | string | 否 | `wav`、`mp3`、`opus`、`aac`、`flac` 或 `pcm`，默认 `mp3` |
 | `speed` | number | 否 | `0.25` 到 `4.0`，默认 `1.0` |
 | `instructions` | string | 否 | 支持指令控制的模型可使用，最多 2000 字符 |
 
 成功时直接返回音频二进制，并附带 `X-Voice-Hub-Job`、`X-Voice-Hub-Request-Id`、响应格式和延迟等响应头。PCM 是 `s16le` 原始数据，采样率、声道数和位深见 `X-Voice-Hub-PCM-*` 响应头。
+
+管理接口 `GET /api/voices` 会为每条音色返回 `api_voice_id`。它优先使用厂商返回的 `provider_voice_id`，因此可以直接复制到兼容接口的 `voice` 字段；如果某类模型没有厂商永久 Voice ID，则回退为 Voice Hub 的唯一 `public_name`。为兼容已有调用，`public_name` 仍可继续作为 `voice` 请求值。
 
 ### `POST /v1/audio/speech/stream`
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Voice Hub TTS"
+  short_description: "Use Voice Hub to choose voices and generate speech"
+  default_prompt: "Use $voice-hub-tts to generate speech with a compatible Voice Hub model and voice."

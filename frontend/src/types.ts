@@ -2,6 +2,7 @@ export type Voice = {
   id: string;
   provider: string;
   model_id: string;
+  api_voice_id?: string;
   display_name: string;
   public_name: string;
   voice_type: string;

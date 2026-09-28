@@ -21,10 +21,12 @@ import {
 } from "lucide-react";
 import { api, responseError } from "../api";
 import { pcmChunksToWavBlob, type PcmInfo } from "../audio";
+import { ExclusiveAudio } from "../components/ExclusiveAudio";
+import { useConfirm } from "../components/feedback/ConfirmProvider";
 import { WorkspaceHero } from "../components/WorkspaceHero";
 import { handleTabListKeyDown } from "../components/tabs";
 import { useStudio } from "../context/StudioContext";
-import type { GatewayAlias, GatewayStats } from "../types";
+import type { GatewayStats } from "../types";
 import { apiTestModels, credentialProviderIds, providerMeta, voiceMatchesModel } from "../utils";
 
 type GatewayTestResult = {
@@ -43,6 +45,7 @@ type GatewayTestResult = {
 
 export function GatewayPage() {
   const { gateway, models, voices } = useStudio();
+  const confirm = useConfirm();
   const [current, setCurrent] = useState(gateway);
   const [visibleKey, setVisibleKey] = useState(false);
   const [copied, setCopied] = useState("");
@@ -64,22 +67,7 @@ export function GatewayPage() {
   const [statsLoading, setStatsLoading] = useState(false);
   const [gatewayView, setGatewayView] = useState<"docs" | "test" | "stats">("docs");
   const [openEndpoint, setOpenEndpoint] = useState("");
-  const [aliases, setAliases] = useState<GatewayAlias[]>([]);
-  const [aliasSelections, setAliasSelections] = useState<Record<string, string>>({});
-  const [aliasSaving, setAliasSaving] = useState(false);
-  const [aliasSavingName, setAliasSavingName] = useState("");
-  const [aliasMessage, setAliasMessage] = useState("");
-  const [aliasLoading, setAliasLoading] = useState(true);
   useEffect(() => setCurrent(gateway), [gateway]);
-  const refreshAliases = async () => {
-    const result = await api<{ aliases: GatewayAlias[] }>("/api/gateway/aliases");
-    setAliases(result.aliases);
-    setAliasSelections(Object.fromEntries(result.aliases.map((item) => [item.alias, item.model_id])));
-  };
-  useEffect(() => {
-    setAliasLoading(true);
-    refreshAliases().catch((error) => setAliasMessage(error instanceof Error ? `模型别名加载失败：${error.message}` : "模型别名加载失败")).finally(() => setAliasLoading(false));
-  }, []);
   const activeGateway = current || gateway;
   const base = activeGateway?.base_url || "http://127.0.0.1:8765/v1";
   const key = activeGateway?.key || "";
@@ -91,17 +79,6 @@ export function GatewayPage() {
   const demoModel = synthesisModels.find((item) => item.mode === "demo");
   const demoVoice = voices.find((item) => voiceMatchesModel(item, demoModel));
   const streamFormat = selectedTestModel?.provider === "mimo" ? "pcm" : "mp3";
-  const aliasMeta: Record<string, { label: string; description: string; tone: string }> = {
-    "tts-default": { label: "通用默认", description: "日常使用的平衡选择", tone: "default" },
-    "tts-fast": { label: "低延迟", description: "优先响应速度", tone: "fast" },
-    "tts-hq": { label: "高质量", description: "优先声音细节", tone: "hq" },
-  };
-  const modelGroups = testableModels.reduce<Record<string, typeof testableModels>>((groups, model) => {
-    const provider = providerMeta[model.provider]?.label || model.provider;
-    (groups[provider] ||= []).push(model);
-    return groups;
-  }, {});
-
   const refreshStats = async () => {
     setStatsLoading(true);
     try {
@@ -150,7 +127,14 @@ export function GatewayPage() {
     }
   };
   const rotate = async () => {
-    if (!activeGateway?.managed || !window.confirm("轮换后旧网关 Key 会立即失效，确定继续吗？")) return;
+    if (!activeGateway?.managed) return;
+    const accepted = await confirm({
+      title: "轮换网关 Key？",
+      description: "轮换后旧网关 Key 会立即失效，使用旧 Key 的客户端需要同步更新。",
+      confirmLabel: "确认轮换",
+      destructive: true,
+    });
+    if (!accepted) return;
     setRotating(true);
     try {
       const result = await api<{ key: string; key_hint: string; key_source: string; managed: boolean }>("/api/gateway/rotate", { method: "POST" });
@@ -162,28 +146,6 @@ export function GatewayPage() {
     } finally {
       setRotating(false);
     }
-  };
-  const saveAlias = async (alias: GatewayAlias) => {
-    const modelId = aliasSelections[alias.alias] || alias.model_id;
-    if (!modelId || modelId === alias.model_id) return;
-    setAliasSaving(true);
-    setAliasSavingName(alias.alias);
-    try {
-      const result = await api<{ aliases: GatewayAlias[] }>(`/api/gateway/aliases/${alias.alias}`, {
-        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model_id: modelId }),
-      });
-      setAliases(result.aliases);
-      setAliasSelections(Object.fromEntries(result.aliases.map((item) => [item.alias, item.model_id])));
-      setAliasMessage(`${alias.alias} 已保存`);
-    } catch (error) { setAliasMessage(error instanceof Error ? error.message : "保存失败"); }
-    finally { setAliasSaving(false); setAliasSavingName(""); }
-  };
-  const resetAliases = async () => {
-    if (!window.confirm("确定恢复三个模型别名的默认指向吗？")) return;
-    const result = await api<{ aliases: GatewayAlias[] }>("/api/gateway/aliases/reset", { method: "POST" });
-    setAliases(result.aliases);
-    setAliasSelections(Object.fromEntries(result.aliases.map((item) => [item.alias, item.model_id])));
-    setAliasMessage("已恢复默认配置");
   };
   const selectTestModel = (modelId: string) => {
     const nextModel = testableModels.find((item) => item.gateway_id === modelId);
@@ -507,31 +469,6 @@ export function GatewayPage() {
         <button id="gateway-tab-stats" type="button" role="tab" aria-controls="gateway-panel-stats" aria-selected={gatewayView === "stats"} tabIndex={gatewayView === "stats" ? 0 : -1} className={gatewayView === "stats" ? "selected" : ""} onClick={() => setGatewayView("stats")}><Gauge size={16} />运行统计</button>
       </div>
 
-      <section className="gateway-alias-section" aria-label="模型别名">
-        <div className="gateway-alias-heading">
-          <div><h3>模型别名</h3><p className="gateway-section-note">让外部应用使用固定名称，同时可以在这里更换实际模型。</p></div>
-          <button className="text-button" onClick={resetAliases}><RotateCcw size={14} />恢复默认配置</button>
-        </div>
-        {aliasLoading && <div className="gateway-alias-empty">正在读取模型别名配置...</div>}
-        {!aliasLoading && !aliases.length && <div className="gateway-alias-empty">没有读取到别名配置，请重启 Voice Hub 后刷新页面。</div>}
-        <div className="gateway-alias-grid">
-          {aliases.map((item) => (
-            <article className={`gateway-alias-card ${item.valid ? "" : "invalid"} tone-${aliasMeta[item.alias]?.tone || "default"}`} key={item.alias}>
-              <div className="gateway-alias-card-head"><div className="gateway-alias-identity"><span className="gateway-alias-mark" /><code>{item.alias}</code></div><span className="gateway-alias-status">{item.valid ? "已配置" : "需检查"}</span></div>
-              <div className="gateway-alias-purpose"><strong>{aliasMeta[item.alias]?.label}</strong><span>{aliasMeta[item.alias]?.description}</span></div>
-              <div className="gateway-alias-target"><span>绑定实际模型</span>
-                <select aria-label={`${item.alias} 绑定模型`} value={aliasSelections[item.alias] || item.model_id} onChange={(event) => setAliasSelections((current) => ({ ...current, [item.alias]: event.target.value }))}>
-                  {Object.entries(modelGroups).map(([provider, group]) => <optgroup label={provider} key={provider}>{group.map((model) => <option value={model.gateway_id} key={model.gateway_id}>{model.display_name}</option>)}</optgroup>)}
-                </select>
-                <code>{aliasSelections[item.alias] || item.model_id}</code>
-              </div>
-              <button className="alias-save-button" disabled={aliasSaving || (aliasSelections[item.alias] || item.model_id) === item.model_id} onClick={() => saveAlias(item)}>{aliasSaving && aliasSavingName === item.alias ? "保存中" : "保存绑定"}</button>
-            </article>
-          ))}
-        </div>
-        {aliasMessage && <div className="copy-feedback"><Check size={14} />{aliasMessage}</div>}
-      </section>
-
       {gatewayView === "docs" && (
         <section id="gateway-panel-docs" className="gateway-docs" role="tabpanel" aria-labelledby="gateway-tab-docs" tabIndex={0}>
           <div className="gateway-docs-heading">
@@ -675,7 +612,7 @@ export function GatewayPage() {
             {speechTest.status === "error" && <div className="test-error"><CircleHelp size={17} /><span>{speechTest.message}</span></div>}
             {speechTest.status === "success" && <>
               <div className="result-metrics"><div><span>HTTP</span><strong>{speechTest.statusCode}</strong></div><div><span>延迟</span><strong>{speechTest.latency}ms</strong></div><div><span>大小</span><strong>{formatBytes(speechTest.size)}</strong></div></div>
-              {testAudioUrl && <div className="test-player"><Volume2 size={16} /><audio controls src={testAudioUrl} /><a className="download-button" href={testAudioUrl} download={`gateway-test.${testFormat}`} title="下载测试音频"><Download size={16} /></a></div>}
+              {testAudioUrl && <div className="test-player"><Volume2 size={16} /><ExclusiveAudio controls src={testAudioUrl} /><a className="download-button" href={testAudioUrl} download={`gateway-test.${testFormat}`} title="下载测试音频"><Download size={16} /></a></div>}
               <div className="result-detail"><span>结果</span><code>{speechTest.message}</code><span>Content-Type</span><code>{speechTest.contentType}</code>{speechTest.jobId && <><span>Job</span><code>{speechTest.jobId}</code></>}</div>
             </>}
             {streamTest.status === "running" && <div className="test-empty stream-live"><RefreshCw size={18} className="spinning" /><span>正在读取 /v1/audio/speech/stream...</span></div>}
@@ -686,7 +623,7 @@ export function GatewayPage() {
             </>}
             {streamTest.status === "success" && <>
               <div className="result-metrics stream-metrics"><div><span>首片</span><strong>{streamTest.firstChunkLatency}ms</strong></div><div><span>总耗时</span><strong>{streamTest.latency}ms</strong></div><div><span>分片</span><strong>{streamTest.chunks}</strong></div><div><span>大小</span><strong>{formatBytes(streamTest.size)}</strong></div></div>
-              {streamAudioUrl && <div className="test-player"><Volume2 size={16} /><audio controls src={streamAudioUrl} />{streamTest.format === "pcm" && <span className="test-audio-note">PCM 已封装为 WAV 供试听</span>}<a className="download-button" href={streamAudioUrl} download={`gateway-stream.${streamTest.format === "pcm" ? "wav" : streamTest.format || "mp3"}`} title="下载流式音频"><Download size={16} /></a></div>}
+              {streamAudioUrl && <div className="test-player"><Volume2 size={16} /><ExclusiveAudio controls src={streamAudioUrl} />{streamTest.format === "pcm" && <span className="test-audio-note">PCM 已封装为 WAV 供试听</span>}<a className="download-button" href={streamAudioUrl} download={`gateway-stream.${streamTest.format === "pcm" ? "wav" : streamTest.format || "mp3"}`} title="下载流式音频"><Download size={16} /></a></div>}
               <div className="result-detail"><span>状态</span><code>{streamTest.message}</code><span>格式</span><code>{streamTest.format || "mp3"}</code><span>HTTP</span><code>{streamTest.statusCode}</code>{streamTest.nativeStreaming !== undefined && <><span>上游</span><code>{streamTest.nativeStreaming ? "原生分片" : "网关兼容分片"}</code></>}{streamTest.jobId && <><span>Job</span><code>{streamTest.jobId}</code></>}</div>
             </>}
           </div>

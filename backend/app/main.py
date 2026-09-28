@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import platform
 import uuid
-from contextlib import asynccontextmanager, suppress
+from contextlib import AsyncExitStack, asynccontextmanager, suppress
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
@@ -152,17 +152,22 @@ async def storage_cleanup_loop() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await asyncio.to_thread(prepare_runtime_directories)
-    init_db()
-    await asyncio.to_thread(run_scheduled_storage_cleanup)
-    task = asyncio.create_task(storage_cleanup_loop())
-    app.state.storage_cleanup_task = task
-    try:
-        yield
-    finally:
-        task.cancel()
-        with suppress(asyncio.CancelledError):
-            await task
+    async with AsyncExitStack() as stack:
+        await asyncio.to_thread(prepare_runtime_directories)
+        init_db()
+        await asyncio.to_thread(run_scheduled_storage_cleanup)
+        if config.MCP_ENABLED:
+            from .mcp_server import mcp_http_app
+
+            await stack.enter_async_context(mcp_http_app.router.lifespan_context(mcp_http_app))
+        task = asyncio.create_task(storage_cleanup_loop())
+        app.state.storage_cleanup_task = task
+        try:
+            yield
+        finally:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
 
 
 app = FastAPI(title="Voice Hub Gateway", version=config.APP_VERSION, lifespan=lifespan)
@@ -179,6 +184,13 @@ app.include_router(routers.voices.router)
 app.include_router(routers.gateway.router)
 app.include_router(routers.jobs.router)
 app.include_router(routers.storage.router)
+
+if config.MCP_ENABLED:
+    from .mcp_server import mcp_http_app
+
+    # Reuse the MCP app's exact /mcp route while its lifespan is managed above.
+    # Adding the route before SPA hosting prevents the catch-all from shadowing it.
+    app.router.routes.extend(mcp_http_app.router.routes)
 
 # --- Static SPA hosting (must come last so it does not shadow the API) ---
 from .routers.system import _command_diagnostic  # noqa: F401  (re-exported for tests)

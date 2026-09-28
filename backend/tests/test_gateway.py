@@ -368,6 +368,9 @@ class GatewayEndpointTests(unittest.TestCase):
 
             self.assertTrue(any(item["provider"] == "demo" for item in models_response.json()))
             self.assertTrue(any(item["provider"] == "demo" for item in voices_response.json()))
+            self.assertTrue(all(item["api_voice_id"] for item in voices_response.json()))
+            provider_voice = next(item for item in voices_response.json() if item["id"] == "voice_narrator")
+            self.assertEqual(provider_voice["api_voice_id"], provider_voice["provider_voice_id"])
             self.assertEqual(rename_response.status_code, 200)
             renamed = rename_response.json()["voice"]
             self.assertEqual(renamed["display_name"], "新的显示名称")
@@ -565,6 +568,16 @@ class GatewayEndpointTests(unittest.TestCase):
                     self.assertEqual(detail.json()["owned_by"], "mimo")
                     self.assertTrue(detail.json()["voice_studio"]["native_streaming"])
                     self.assertEqual(detail.json()["voice_studio"]["native_stream_formats"], ["pcm"])
+
+                    short_detail = await client.get("/v1/models/seed-icl-2.0", headers=headers)
+                    self.assertEqual(short_detail.status_code, 200)
+                    self.assertEqual(short_detail.json()["id"], "seed-icl-2.0")
+                    self.assertEqual(short_detail.json()["owned_by"], "volcengine")
+
+                    short_model = main.resolve_model("seed-tts-2.0")
+                    provider_voice = main.resolve_voice("zh_female_vv_uranus_bigtts", short_model)
+                    self.assertIsNotNone(provider_voice)
+                    self.assertEqual(provider_voice["public_name"], "volc-vivi")
 
                     missing = await client.get("/v1/models/does-not-exist", headers=headers)
                     self.assertEqual(missing.status_code, 404)

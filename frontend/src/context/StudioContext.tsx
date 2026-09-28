@@ -7,6 +7,8 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { toast } from "sonner";
+import { useConfirm } from "@/components/feedback/ConfirmProvider";
 import { api, responseError } from "../api";
 import type {
   CloneConfig,
@@ -64,6 +66,10 @@ type StudioContextValue = {
 
 const StudioContext = createContext<StudioContextValue | null>(null);
 
+type NoticeTone = "info" | "success" | "error" | "loading";
+
+type UpdateInfo = { available: boolean; latest_version: string; release_url: string; can_install: boolean };
+
 export function StudioProvider({ children }: { children: ReactNode }) {
   const [active, setActive] = useState("synthesize");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() =>
@@ -80,7 +86,7 @@ export function StudioProvider({ children }: { children: ReactNode }) {
   const [instructions, setInstructions] = useState("");
   const [audioUrl, setAudioUrl] = useState("");
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState("");
+  const [notice, setNoticeText] = useState("");
   const [updateUrl, setUpdateUrl] = useState("");
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateInstallable, setUpdateInstallable] = useState(false);
@@ -88,6 +94,44 @@ export function StudioProvider({ children }: { children: ReactNode }) {
   const [gateway, setGateway] = useState<Gateway | null>(null);
   const synthesisAbortRef = useRef<AbortController | null>(null);
   const synthesisRequestRef = useRef(0);
+  const installUpdateRef = useRef<() => Promise<void>>(async () => undefined);
+  const confirm = useConfirm();
+  // 提示统一走 toast；notice 字段保留最近一条文本，维持对外接口兼容。
+  const notify = (message: string, tone: NoticeTone = "info", id?: string) => {
+    setNoticeText(message);
+    if (!message) {
+      if (id) toast.dismiss(id);
+      return;
+    }
+    const options = id ? { id } : undefined;
+    if (tone === "success") toast.success(message, options);
+    else if (tone === "error") toast.error(message, options);
+    else if (tone === "loading") toast.loading(message, options);
+    else toast(message, options);
+  };
+  const setNotice = (value: string) => notify(value);
+  const errorMessage = (error: unknown, fallback: string) =>
+    error instanceof Error ? error.message : fallback;
+  const announceUpdate = (update: UpdateInfo) => {
+    setUpdateUrl(update.release_url);
+    setUpdateAvailable(true);
+    setUpdateInstallable(update.can_install);
+    setNoticeText(`发现 Voice Hub ${update.latest_version}`);
+    const openRelease = () => window.open(update.release_url, "_blank", "noopener,noreferrer");
+    toast.info(`发现 Voice Hub ${update.latest_version}`, {
+      id: "voice-hub-update",
+      duration: Infinity,
+      description: update.can_install
+        ? "可以立即更新，程序会自动下载、校验并重启。"
+        : "可在 GitHub Release 页面下载安装包。",
+      action: update.can_install
+        ? { label: "立即更新", onClick: () => void installUpdateRef.current() }
+        : { label: "打开 Release", onClick: openRelease },
+      cancel: update.can_install
+        ? { label: "打开 Release", onClick: openRelease }
+        : undefined,
+    });
+  };
   const selectedModel = useMemo(
     () => models.find((item) => item.gateway_id === model),
     [models, model],
@@ -109,7 +153,7 @@ export function StudioProvider({ children }: { children: ReactNode }) {
       api<Model[]>("/api/models"),
       api<Job[]>("/api/jobs?limit=500"),
       api<Gateway>("/api/gateway?reveal=true"),
-      api<{ available: boolean; latest_version: string; release_url: string; can_install: boolean }>("/api/update/check"),
+      api<UpdateInfo>("/api/update/check"),
     ]).then(([voicesResult, modelsResult, jobsResult, gatewayResult, updateResult]) => {
       if (cancelled) return;
       const failures: string[] = [];
@@ -138,28 +182,22 @@ export function StudioProvider({ children }: { children: ReactNode }) {
       if (gatewayResult.status === "fulfilled") setGateway(gatewayResult.value);
       else failures.push("网关配置");
       if (updateResult.status === "fulfilled" && updateResult.value.available) {
-        setUpdateUrl(updateResult.value.release_url);
-        setUpdateAvailable(true);
-        setUpdateInstallable(updateResult.value.can_install);
-        setNotice(`发现 Voice Hub ${updateResult.value.latest_version}，可在 GitHub Release 页面下载安装包。`);
+        announceUpdate(updateResult.value);
       }
       if (failures.length) {
-        setNotice(`部分数据加载失败：${failures.join("、")}。请确认后端已启动。`);
+        notify(`部分数据加载失败：${failures.join("、")}。请确认后端已启动。`, "error");
       }
     });
     return () => {
       cancelled = true;
     };
+    // 仅在首次挂载时加载初始数据。
   }, []);
   useEffect(() => {
     const timer = window.setInterval(() => {
-      void api<{ available: boolean; latest_version: string; release_url: string; can_install: boolean }>("/api/update/check")
+      void api<UpdateInfo>("/api/update/check")
         .then((result) => {
-          if (!result.available) return;
-          setUpdateUrl(result.release_url);
-          setUpdateAvailable(true);
-          setUpdateInstallable(result.can_install);
-          setNotice(`发现 Voice Hub ${result.latest_version}，可在 GitHub Release 页面下载安装包。`);
+          if (result.available) announceUpdate(result);
         })
         .catch(() => undefined);
     }, 6 * 60 * 60 * 1000);
@@ -167,16 +205,22 @@ export function StudioProvider({ children }: { children: ReactNode }) {
   }, []);
   const installUpdate = async () => {
     if (!updateInstallable || updateInstalling) return;
-    if (!window.confirm("Voice Hub 将下载更新、关闭当前程序并自动重启。是否继续？")) return;
+    const accepted = await confirm({
+      title: "安装 Voice Hub 更新？",
+      description: "Voice Hub 将下载更新、关闭当前程序并自动重启。",
+      confirmLabel: "立即更新",
+    });
+    if (!accepted) return;
     setUpdateInstalling(true);
-    setNotice("正在下载并校验更新，完成后将自动重启…");
+    notify("正在下载并校验更新，完成后将自动重启…", "loading", "voice-hub-update");
     try {
       await api<{ status: string }>("/api/update/install", { method: "POST" });
     } catch (error) {
       setUpdateInstalling(false);
-      setNotice(error instanceof Error ? error.message : "启动更新失败");
+      notify(errorMessage(error, "启动更新失败"), "error", "voice-hub-update");
     }
   };
+  installUpdateRef.current = installUpdate;
   useEffect(
     () => () => {
       if (audioUrl) URL.revokeObjectURL(audioUrl);
@@ -206,10 +250,12 @@ export function StudioProvider({ children }: { children: ReactNode }) {
     synthesisAbortRef.current = controller;
     const requestId = ++synthesisRequestRef.current;
     setBusy(true);
-    setNotice(
+    notify(
       selectedModel?.mode === "provider"
-        ? "正在调用厂商接口生成音频..."
-        : "正在生成演示音频...",
+        ? "正在调用厂商接口生成音频…"
+        : "正在生成演示音频…",
+      "loading",
+      "synthesis",
     );
     try {
       const response = await fetch("/v1/audio/speech", {
@@ -241,11 +287,11 @@ export function StudioProvider({ children }: { children: ReactNode }) {
         return;
       }
       setAudioUrl(nextAudioUrl);
-      setNotice("已生成，可试听或下载");
+      notify("已生成，可试听或下载", "success", "synthesis");
       await refreshJobs();
     } catch (error) {
       if (controller.signal.aborted || requestId !== synthesisRequestRef.current) return;
-      setNotice(error instanceof Error ? error.message : "生成失败");
+      notify(errorMessage(error, "生成失败"), "error", "synthesis");
     } finally {
       if (requestId === synthesisRequestRef.current) {
         setBusy(false);
@@ -263,7 +309,7 @@ export function StudioProvider({ children }: { children: ReactNode }) {
       },
     );
     setVoices((current) => [created.voice, ...current]);
-    setNotice(created.message);
+    notify(created.message, "success");
   };
   const importVoices = async (configs: ImportVoiceConfig[]) => {
     const created = await api<{ voices: Voice[]; message: string }>(
@@ -275,15 +321,16 @@ export function StudioProvider({ children }: { children: ReactNode }) {
       },
     );
     setVoices((current) => [...created.voices, ...current]);
-    setNotice(created.message);
+    notify(created.message, "success");
   };
   const removeVoice = async (item: Voice) => {
-    if (
-      !window.confirm(
-        `从 Voice Hub 移除“${item.display_name}”？\n\n这不会删除厂商控制台里的远端音色；本地参考音频（如有）也会一并删除。`,
-      )
-    )
-      return;
+    const accepted = await confirm({
+      title: `从 Voice Hub 移除“${item.display_name}”？`,
+      description: "这不会删除厂商控制台里的远端音色；本地参考音频（如有）也会一并删除。",
+      confirmLabel: "移除",
+      destructive: true,
+    });
+    if (!accepted) return;
     try {
       const result = await api<{ message: string }>("/api/voices/" + item.id, {
         method: "DELETE",
@@ -292,9 +339,9 @@ export function StudioProvider({ children }: { children: ReactNode }) {
         current.filter((voiceItem) => voiceItem.id !== item.id),
       );
       if (voice === item.public_name) setVoice("");
-      setNotice(result.message);
+      notify(result.message, "success");
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "删除失败");
+      notify(errorMessage(error, "删除失败"), "error");
     }
   };
   const renameVoice = async (item: Voice, displayName: string) => {
@@ -304,10 +351,10 @@ export function StudioProvider({ children }: { children: ReactNode }) {
       body: JSON.stringify({ display_name: displayName }),
     });
     setVoices((current) => current.map((voiceItem) => voiceItem.id === item.id ? result.voice : voiceItem));
-    setNotice(result.message);
+    notify(result.message, "success");
   };
   const cloneVoice = async (config: CloneConfig, file: File) => {
-    if (!file) return setNotice("请选择一段参考音频");
+    if (!file) return notify("请选择一段参考音频", "error");
     const query = new URLSearchParams({
       provider_name: config.provider,
       model_id: config.model_id,
@@ -331,10 +378,10 @@ export function StudioProvider({ children }: { children: ReactNode }) {
       setVoices((current) => [created.voice, ...current]);
       setModel(created.voice.provider + "/" + created.voice.model_id);
       setVoice(created.voice.public_name);
-      setNotice(created.message);
+      notify(created.message, "success");
       setActive("synthesize");
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "克隆失败");
+      notify(errorMessage(error, "克隆失败"), "error");
     }
   };
   const designVoice = async (config: DesignConfig) => {
@@ -352,7 +399,7 @@ export function StudioProvider({ children }: { children: ReactNode }) {
     );
     if (compatibleModel) setModel(compatibleModel.gateway_id);
     setVoice(created.voice.public_name);
-    setNotice(created.message);
+    notify(created.message, "success");
     return created.voice;
   };
   const useVoice = (item: Voice) => {
@@ -365,12 +412,12 @@ export function StudioProvider({ children }: { children: ReactNode }) {
           modelItem.model_id === item.model_id),
     );
     if (!compatibleModel) {
-      setNotice(`没有找到与“${item.display_name}”兼容的语音合成模型`);
+      notify(`没有找到与“${item.display_name}”兼容的语音合成模型`, "error");
       return;
     }
     setModel(compatibleModel.gateway_id);
     setVoice(item.public_name);
-    setNotice(`已选择音色“${item.display_name}”`);
+    notify(`已选择音色“${item.display_name}”`, "success");
     setActive("synthesize");
   };
 

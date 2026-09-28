@@ -5,7 +5,7 @@
 ## 项目定位
 
 - Voice Hub 是单机优先的多厂商云端语音工作台，通过远程 API 调用语音厂商，不加载或运行本地语音模型，同时提供 OpenAI 兼容 API 网关。
-- 前端是 React + TypeScript + Vite，后端是 FastAPI + Python，数据层是 SQLite 和 `data/` 文件。
+- 前端是 React + TypeScript + Vite，沿用项目原生 CSS 和 Lucide 图标，不使用 Tailwind/shadcn；后端是 FastAPI + Python，数据层是 SQLite 和 `data/` 文件。
 - 当前厂商适配器包括通义千问、火山引擎、MiniMax 和小米 MiMo。
 - 浏览器只访问本机后端；厂商密钥应留在系统密钥环或 Docker Secret/环境变量中，不进入前端代码、SQLite 或日志。
 - 项目主要面向单用户本地运行，不要未经明确要求把设计改成多租户云服务或公网开放服务。
@@ -24,8 +24,10 @@
 | `frontend/src/App.tsx` | 应用外壳、导航和页面实例保留 | 跨页面状态行为先看 `StudioContext` |
 | `frontend/src/context/StudioContext.tsx` | 模型、音色、任务、网关和合成共享状态 | 改动后补前端测试或手工验证核心流程 |
 | `frontend/src/pages/` | 合成、音色、克隆、设计、网关、历史、设置页面 | 页面文案和状态要与 API 合约一致 |
-| `frontend/src/components/` | 可复用 UI 组件 | 优先复用现有组件和样式约定 |
-| `frontend/src/styles.css` | 全局布局、响应式和焦点样式 | 保持键盘可访问性和窄屏布局 |
+| `frontend/src/components/` | 可复用业务组件、确认弹窗（`feedback/`）和互斥音频组件 | 优先复用现有组件和样式约定 |
+| `frontend/src/audioPlayback.ts`、`frontend/src/components/ExclusiveAudio.tsx` | 全应用音频互斥控制与原生播放器封装 | 新增播放器时接入同一控制器，避免多段音频同时播放 |
+| `frontend/src/styles.css` | 原生 CSS 界面、响应式布局、确认弹窗、全局焦点和 reduced-motion 样式 | 保留现有信息架构、键盘可访问性和窄屏布局 |
+| `frontend/scripts/build-fonts.mjs` | 把 `frontend/fonts-src/` 中的 HarmonyOS Sans SC 切成 woff2 分片 | 字体源文件不提交；输出位于 `src/assets/fonts/harmonyos-sans/` |
 | `backend/app/main.py` | FastAPI 装配、中间件、异常处理和静态文件服务 | 不要在路由中泄露密钥或完整上游响应 |
 | `backend/app/routers/` | 管理、任务、音色、网关、存储和系统接口 | 新接口同步更新 API 文档和测试 |
 | `backend/app/services.py` | 模型解析、适配器选择、音频转换和共享业务逻辑 | 避免把厂商特例散落到路由层 |
@@ -84,12 +86,21 @@ Docker 相关操作必须遵守工作区的 Docker 规则；本项目源码位�
 - 报告实际验证结果和未验证项，不把“进程启动”或 HTTP 200 单独当作功能完成证明。
 - 最后再次运行 `git status --short`，确认没有把 `.env`、数据库、音频、日志、缓存或构建产物纳入改动。
 
-## 已验证的项目事实（2026-09-26）
+## 已验证的项目事实（截至 2026-09-28）
 
 - 前端锁定 React 19、TypeScript 5.9、Vite 8、Vitest 5；可用命令是 `npm run lint`、`npm test` 和 `npm run build`，均从 `frontend` 目录执行。
+- 前端沿用 `src/styles.css` 的原版浅色工作台布局和原生 CSS；不依赖 Tailwind、shadcn 或 Radix。`@/` 别名指向 `frontend/src`，在 `vite.config.ts`、`tsconfig.json` 和 `tsconfig.app.json` 中同步配置。
+- 短暂反馈统一使用 sonner `toast`，破坏性操作使用原生实现且带焦点管理的 `useConfirm()`；不要再使用 `window.confirm`。带原生 controls 的音频使用 `ExclusiveAudio`，历史按钮直接接入 `appAudioController`，保证全应用同一时间只播放一段音频。
+- 字体不再从 Google Fonts 联网加载。等宽字体默认离线打包 `@fontsource-variable/jetbrains-mono`；中文字体默认使用系统字体，HarmonyOS Sans SC 是可选构建，需维护者自行下载并接受华为许可协议后放入 `frontend/fonts-src/`（已被 `.gitignore` 忽略）并运行 `npm run fonts:build`。未生成时占位 `index.css` 使 production build 正常回退到系统字体。
 - 后端依赖锁定 FastAPI 0.141、Uvicorn 0.35、Pydantic 2.13；`backend/app/main.py` 统一装配 `system`、`accounts`、`voices`、`gateway`、`jobs`、`storage` 六组路由，并在存在 `frontend/dist` 时提供 SPA 静态文件。
 - FastAPI lifespan 启动时创建运行目录、初始化 SQLite、执行一次到期存储清理，并启动每小时清理任务；`backend/app/runtime.py` 会把已知旧日志迁移到 `data/logs/` 且不覆盖同名文件。
 - Docker 镜像采用 Node 22 构建前端、Python 3.12 运行后端，以非 root `voice` 用户、只读根文件系统、256 MB `/tmp`、丢弃全部 capabilities 和 `no-new-privileges` 运行；健康检查为 `GET /api/summary`。
 - CI 在 Ubuntu、macOS、Windows 上执行前后端检查，并额外验证系统密钥环；Docker job 会构建镜像并运行 `docker compose config --quiet`。不要把本地 Windows 环境的单次通过误写成跨平台运行保证。
-- 当前基线验证结果：后端 `69 passed`；前端 `2` 个测试文件、`9 passed`，lint 和 production build 均通过。测试会使用临时 `VOICE_STUDIO_ROOT` 并阻止外网访问。
+- 当前验证结果：后端最近一次完整基线为 `81 passed`；本次前端回退合并后为 `2` 个测试文件、`10 passed`，lint 和 production build 均通过。后端测试会使用临时 `VOICE_STUDIO_ROOT` 并阻止外网访问。
 - 发布 `v*.*.*` 标签会分别触发 `.github/workflows/release.yml` 和 `.github/workflows/docker-publish.yml`：前者构建 Windows、Linux、macOS 发布包并创建 GitHub Release，后者发布 `linux/amd64`、`linux/arm64` 的 GHCR 镜像。
+- `backend/app/cli.py` 是无第三方运行时依赖的 HTTP CLI 客户端；Windows 通过根目录 `voicehub.cmd` 调用，便携版通过 `VoiceHub.exe cli` 承载。CLI 支持 `doctor`、`models`、`voices`、`jobs`、`speak`、`download` 和全局 `--json`。
+- `deploy/1panel/compose.yml` 是服务器镜像部署模板，固定版本、绑定环回地址并使用 `voice-hub-data` 命名卷持久化数据；部署、升级与回滚说明位于 `docs/1PANEL.md`。模板验证不代表已在用户服务器实际部署。
+- `backend/app/mcp_server.py` 使用 `mcp==2.2.0` 在同一 FastAPI 服务的 `/mcp` 提供 Streamable HTTP；FastAPI lifespan 会显式管理 MCP session manager，路由位于 SPA catch-all 之前。
+- MCP 提供 7 个工具，只开放查询、生成和音频读取；不会返回 Gateway Key、厂商凭据或服务器文件路径。`create_speech` 可能访问远程厂商并产生费用，其他工具是只读操作。
+- `skills/voice-hub-tts` 可通过 `skills/list`、`skills/get` 和 `resources/read` 扫描，Skill 规定先查模型和兼容音色、禁止猜测音色 ID，并在没有 MCP 时回退到 CLI。
+- WebUI 的模型别名配置位于“设置 → 模型别名”，由 `frontend/src/components/ModelAliasSettings.tsx` 调用 `/api/gateway/aliases` 管理；API 网关页只保留凭据、快速开始、文档、测试和统计。音色库按音色、Voice ID、模型、模型 ID、类型、语言单行展示；`GET /api/voices` 返回的 `api_voice_id` 优先使用厂商真实 `provider_voice_id`，缺失时回退到 `public_name`。兼容网关接受唯一短模型 ID、完整 `provider/model` ID 和模型别名，已有 `public_name` 音色调用仍保持兼容。

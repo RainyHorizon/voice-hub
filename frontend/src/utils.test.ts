@@ -18,6 +18,7 @@ const voice = (provider: string, modelId: string): Voice => ({
   id: "voice-test",
   provider,
   model_id: modelId,
+  api_voice_id: "test-provider-voice",
   display_name: "Test Voice",
   public_name: "test-voice",
   voice_type: "preset",

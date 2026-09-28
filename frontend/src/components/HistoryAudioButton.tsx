@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Pause, Play } from "lucide-react";
-import { historyAudioController } from "../audioPlayback";
+import { appAudioController } from "../audioPlayback";
 
 export function HistoryAudioButton({ src, label, compact = false }: { src?: string | null; label: string; compact?: boolean }) {
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -8,13 +8,13 @@ export function HistoryAudioButton({ src, label, compact = false }: { src?: stri
   const handlePlay = () => {
     const audio = audioRef.current;
     if (!audio) return;
-    historyAudioController.activate(audio);
+    appAudioController.activate(audio);
     setPlaying(true);
   };
   const handleStop = () => {
     const audio = audioRef.current;
     if (!audio) return;
-    historyAudioController.release(audio);
+    appAudioController.release(audio);
     setPlaying(false);
   };
   useEffect(
@@ -22,7 +22,7 @@ export function HistoryAudioButton({ src, label, compact = false }: { src?: stri
       const audio = audioRef.current;
       if (!audio) return;
       audio.pause();
-      historyAudioController.release(audio);
+      appAudioController.release(audio);
     },
     [],
   );
@@ -30,11 +30,11 @@ export function HistoryAudioButton({ src, label, compact = false }: { src?: stri
     const audio = audioRef.current;
     if (!audio || !src) return;
     if (audio.paused) {
-      historyAudioController.activate(audio);
+      appAudioController.activate(audio);
       try {
         await audio.play();
       } catch {
-        historyAudioController.release(audio);
+        appAudioController.release(audio);
         setPlaying(false);
       }
     } else {

@@ -39,6 +39,7 @@ COPY backend/requirements.txt /app/backend/requirements.txt
 RUN pip install --no-cache-dir --disable-pip-version-check -r /app/backend/requirements.txt
 COPY backend/app /app/backend/app
 COPY --from=frontend-builder /build/frontend/dist /app/frontend/dist
+COPY skills /app/skills
 COPY LICENSE README.md /app/
 
 RUN chown -R voice:voice /app

@@ -46,8 +46,10 @@ New-Item -ItemType Directory -Force -Path (Join-Path $stagePath "frontend") | Ou
 Copy-Item -LiteralPath (Join-Path $projectRoot "backend\app") -Destination (Join-Path $stagePath "backend\app") -Recurse
 Copy-Item -LiteralPath (Join-Path $projectRoot "backend\requirements.txt") -Destination (Join-Path $stagePath "backend\requirements.txt")
 Copy-Item -LiteralPath (Join-Path $projectRoot "frontend\dist") -Destination (Join-Path $stagePath "frontend\dist") -Recurse
+Copy-Item -LiteralPath (Join-Path $projectRoot "skills") -Destination (Join-Path $stagePath "skills") -Recurse
 Copy-Item -LiteralPath (Join-Path $projectRoot "start.ps1") -Destination (Join-Path $stagePath "start.ps1")
 Copy-Item -LiteralPath (Join-Path $projectRoot "启动 Voice Hub.bat") -Destination (Join-Path $stagePath "启动 Voice Hub.bat")
+Copy-Item -LiteralPath (Join-Path $projectRoot "voicehub.cmd") -Destination (Join-Path $stagePath "voicehub.cmd")
 Copy-Item -LiteralPath (Join-Path $projectRoot "更新 Voice Hub.bat") -Destination (Join-Path $stagePath "更新 Voice Hub.bat")
 Copy-Item -LiteralPath (Join-Path $projectRoot "update.ps1") -Destination (Join-Path $stagePath "update.ps1")
 Copy-Item -LiteralPath (Join-Path $projectRoot "README.md") -Destination (Join-Path $stagePath "README.md")

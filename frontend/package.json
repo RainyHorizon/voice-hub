@@ -6,23 +6,28 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc -b && vite build",
+    "fonts:build": "node scripts/build-fonts.mjs",
     "lint": "eslint .",
     "test": "vitest run",
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {
+    "@fontsource-variable/jetbrains-mono": "^5.2.8",
     "lucide-react": "^0.468.0",
     "react": "^19.1.1",
-    "react-dom": "^19.1.1"
+    "react-dom": "^19.1.1",
+    "sonner": "^2.0.7"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "@types/node": "^24.6.0",
     "@types/react": "^19.1.10",
     "@types/react-dom": "^19.1.7",
     "@vitejs/plugin-react": "6.0.5",
     "eslint": "10.10.0",
     "eslint-plugin-react-hooks": "7.1.1",
     "eslint-plugin-react-refresh": "0.5.6",
+    "cn-font-split": "^7.2.5",
     "globals": "17.12.0",
     "typescript": "5.9.3",
     "typescript-eslint": "8.69.0",

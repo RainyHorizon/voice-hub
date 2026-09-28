@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Volume2, WandSparkles } from "lucide-react";
+import { ExclusiveAudio } from "../components/ExclusiveAudio";
 import { ProviderSelector } from "../components/ProviderSelector";
 import { useStudio } from "../context/StudioContext";
 import type { Voice } from "../types";
@@ -125,7 +126,7 @@ export function DesignPage() {
                 <span>试听结果</span>
                 <strong>{previewVoice.display_name}</strong>
                 <small>{previewVoice.provider === "mimo" ? "请求级设计模板" : "已保存到音色库"} · {previewVoice.public_name}</small>
-                {previewVoice.preview_url && <audio controls src={previewVoice.preview_url} />}
+                {previewVoice.preview_url && <ExclusiveAudio controls src={previewVoice.preview_url} />}
               </div>
             </div>
           )}

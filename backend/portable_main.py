@@ -95,6 +95,11 @@ def open_when_ready(url: str) -> None:
 
 
 def run() -> int:
+    if len(sys.argv) > 1 and sys.argv[1] == "cli":
+        from app.cli import run_cli
+
+        return run_cli(sys.argv[2:])
+
     parser = argparse.ArgumentParser(description="Voice Hub Windows 便携版")
     parser.add_argument("--port", type=int, choices=range(1, 65536), help="本地服务端口")
     parser.add_argument("--no-browser", action="store_true", help="启动后不自动打开浏览器")
