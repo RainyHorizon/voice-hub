@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import {
   Activity,
   Check,
@@ -9,6 +9,8 @@ import {
   FolderOpen,
   HardDrive,
   KeyRound,
+  LockKeyhole,
+  LogOut,
   Plus,
   RefreshCw,
   Route,
@@ -26,6 +28,7 @@ import { handleTabListKeyDown } from "../components/tabs";
 import { useStudio } from "../context/StudioContext";
 import { useDialogAccessibility } from "../hooks/useDialogAccessibility";
 import type {
+  AuthStatus,
   CleanupPreview,
   CleanupRun,
   Model,
@@ -40,7 +43,7 @@ import { credentialProviderIds, formatBytes, providerMeta } from "../utils";
 
 export function SettingsPage() {
   const { models, refreshJobs: onJobsChanged } = useStudio();
-  const [section, setSection] = useState<"providers" | "aliases" | "storage" | "environment">("providers");
+  const [section, setSection] = useState<"providers" | "aliases" | "storage" | "security" | "environment">("providers");
   return (
     <section className="page-section settings-shell">
       <WorkspaceHero
@@ -52,14 +55,60 @@ export function SettingsPage() {
         <button id="settings-tab-providers" className={section === "providers" ? "selected" : ""} type="button" role="tab" aria-controls="settings-panel-providers" aria-selected={section === "providers"} tabIndex={section === "providers" ? 0 : -1} onClick={() => setSection("providers")}><KeyRound size={18} />厂商账号</button>
         <button id="settings-tab-aliases" className={section === "aliases" ? "selected" : ""} type="button" role="tab" aria-controls="settings-panel-aliases" aria-selected={section === "aliases"} tabIndex={section === "aliases" ? 0 : -1} onClick={() => setSection("aliases")}><Route size={18} />默认模型</button>
         <button id="settings-tab-storage" className={section === "storage" ? "selected" : ""} type="button" role="tab" aria-controls="settings-panel-storage" aria-selected={section === "storage"} tabIndex={section === "storage" ? 0 : -1} onClick={() => setSection("storage")}><HardDrive size={18} />存储与清理</button>
+        <button id="settings-tab-security" className={section === "security" ? "selected" : ""} type="button" role="tab" aria-controls="settings-panel-security" aria-selected={section === "security"} tabIndex={section === "security" ? 0 : -1} onClick={() => setSection("security")}><LockKeyhole size={18} />账户安全</button>
         <button id="settings-tab-environment" className={section === "environment" ? "selected" : ""} type="button" role="tab" aria-controls="settings-panel-environment" aria-selected={section === "environment"} tabIndex={section === "environment" ? 0 : -1} onClick={() => setSection("environment")}><ShieldCheck size={18} />运行环境</button>
       </div>
       {section === "providers" && <ProviderSettings models={models} panelId="settings-panel-providers" labelledBy="settings-tab-providers" />}
       {section === "aliases" && <ModelAliasSettings models={models} panelId="settings-panel-aliases" labelledBy="settings-tab-aliases" />}
       {section === "storage" && <StorageSettings onJobsChanged={onJobsChanged} panelId="settings-panel-storage" labelledBy="settings-tab-storage" />}
+      {section === "security" && <SecuritySettings panelId="settings-panel-security" labelledBy="settings-tab-security" />}
       {section === "environment" && <EnvironmentSettings panelId="settings-panel-environment" labelledBy="settings-tab-environment" />}
     </section>
   );
+}
+
+function SecuritySettings({ panelId, labelledBy }: { panelId: string; labelledBy: string }) {
+  const [status, setStatus] = useState<AuthStatus | null>(null);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmation, setConfirmation] = useState("");
+  const [message, setMessage] = useState("");
+  const [working, setWorking] = useState(false);
+  useEffect(() => { void api<AuthStatus>("/api/auth/status").then(setStatus).catch(() => undefined); }, []);
+  const changePassword = async (event: FormEvent) => {
+    event.preventDefault();
+    setWorking(true); setMessage("");
+    try {
+      const result = await api<{ message: string }>("/api/auth/password", { method: "POST", body: JSON.stringify({ current_password: currentPassword, password, confirmation }) });
+      setCurrentPassword(""); setPassword(""); setConfirmation(""); setMessage(result.message);
+    } catch (error) { setMessage(error instanceof Error ? error.message : "密码更新失败"); }
+    finally { setWorking(false); }
+  };
+  const logout = async () => {
+    await api("/api/auth/logout", { method: "POST" }).catch(() => undefined);
+    window.location.reload();
+  };
+  return <div id={panelId} className="security-settings-page" role="tabpanel" aria-labelledby={labelledBy}>
+    <div className="security-heading">
+      <div><h2>账户安全</h2><p>管理工作台登录密码，与 API 网关 Key 独立。</p></div>
+      <button className="secondary-button" type="button" onClick={() => void logout()}><LogOut size={16} />退出登录</button>
+    </div>
+    <div className="security-status">
+      <LockKeyhole size={20} aria-hidden="true" />
+      <div>
+        <strong>{!status ? "正在读取安全状态…" : status.auth_enabled ? "密码保护已启用" : "密码保护已关闭"}</strong>
+        {status && <span>{status.auth_enabled ? `登录有效期 ${Math.round(status.session_ttl_seconds / 86400)} 天` : "可通过 VOICE_STUDIO_AUTH_ENABLED=true 启用"}</span>}
+      </div>
+    </div>
+    {status?.auth_enabled && <form className="security-form" onSubmit={(event) => void changePassword(event)}>
+      <h3>修改密码</h3>
+      <label><span>当前密码</span><input type="password" required maxLength={256} value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} autoComplete="current-password" placeholder="请输入当前密码" /></label>
+      <label><span>新密码</span><input type="password" required minLength={status.password_min_length} maxLength={256} value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="new-password" placeholder={`至少 ${status.password_min_length} 个字符`} /></label>
+      <label><span>确认新密码</span><input type="password" required minLength={status.password_min_length} maxLength={256} value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="new-password" placeholder="再次输入新密码" /></label>
+      {message && <p className="form-message" role="status">{message}</p>}
+      <button className="primary-button" disabled={working} type="submit">{working ? "保存中…" : "更新密码"}</button>
+    </form>}
+  </div>;
 }
 
 function EnvironmentSettings({ panelId, labelledBy }: { panelId?: string; labelledBy?: string }) {

@@ -20,6 +20,8 @@ VOICE_STUDIO_GATEWAY_KEY=请替换为随机长字符串
 
 然后只填写实际使用的厂商 Key。`VOICE_STUDIO_GATEWAY_KEY` 是调用 Voice Hub 的网关凭据，不是任何厂商的 API Key。不要把 `.env` 上传到 GitHub、截图公开或粘贴到聊天中。
 
+WebUI 默认启用内置管理密码。首次打开网页时创建密码；以后访问管理页面需要登录。该密码与 `VOICE_STUDIO_GATEWAY_KEY` 相互独立，CLI、OpenAI 兼容接口和 MCP 仍按各自的网关凭据使用。忘记密码时，在项目的 `backend` 目录执行 `python -m app.auth_admin reset`，按提示输入新密码。
+
 可以在服务器终端生成随机 Gateway Key：
 
 ```bash

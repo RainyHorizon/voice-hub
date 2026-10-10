@@ -69,3 +69,10 @@ try:
 except ValueError:
     MCP_MAX_AUDIO_BYTES = 15 * 1024 * 1024
 MCP_MAX_AUDIO_BYTES = max(1024 * 1024, min(MCP_MAX_AUDIO_BYTES, 100 * 1024 * 1024))
+
+AUTH_ENABLED = _environment_flag("VOICE_STUDIO_AUTH_ENABLED", True)
+try:
+    AUTH_SESSION_DAYS = int(os.getenv("VOICE_STUDIO_AUTH_SESSION_DAYS", "7"))
+except ValueError:
+    AUTH_SESSION_DAYS = 7
+AUTH_SESSION_DAYS = max(1, min(AUTH_SESSION_DAYS, 90))

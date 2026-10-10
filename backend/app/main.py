@@ -79,6 +79,7 @@ from .storage import (  # noqa: F401
     storage_snapshot,
     write_policy,
 )
+from .auth import SESSION_COOKIE, password_configured, valid_session
 
 
 async def reject_untrusted_browser_origin(request: Request, call_next):
@@ -87,6 +88,32 @@ async def reject_untrusted_browser_origin(request: Request, call_next):
         return JSONResponse(
             status_code=403,
             content={"error": {"message": "不允许的浏览器来源", "type": "authentication_error", "code": "untrusted_origin"}},
+        )
+    return await call_next(request)
+
+
+async def require_web_auth(request: Request, call_next):
+    """Protect management APIs while leaving Gateway-Key APIs independent."""
+    if (
+        not config.AUTH_ENABLED
+        or request.method == "OPTIONS"
+        or not request.url.path.startswith("/api/")
+        or request.url.path.startswith("/api/auth/")
+        or request.url.path == "/api/summary"
+    ):
+        return await call_next(request)
+    with db() as connection:
+        configured = password_configured(connection)
+        authenticated = configured and valid_session(connection, request.cookies.get(SESSION_COOKIE))
+    if not configured:
+        return JSONResponse(
+            status_code=428,
+            content={"error": {"message": "请先设置 Voice Hub 管理密码", "type": "authentication_error", "code": "auth_setup_required"}},
+        )
+    if not authenticated:
+        return JSONResponse(
+            status_code=401,
+            content={"error": {"message": "请先登录 Voice Hub", "type": "authentication_error", "code": "auth_required"}},
         )
     return await call_next(request)
 
@@ -174,10 +201,12 @@ app = FastAPI(title="Voice Hub Gateway", version=config.APP_VERSION, lifespan=li
 app.add_middleware(CORSMiddleware, allow_origins=sorted(config.LOCAL_BROWSER_ORIGINS), allow_methods=["*"], allow_headers=["*"])
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=config.TRUSTED_HOSTS)
 app.middleware("http")(reject_untrusted_browser_origin)
+app.middleware("http")(require_web_auth)
 app.add_exception_handler(HTTPException, openai_http_exception_handler)
 app.add_exception_handler(RequestValidationError, openai_validation_exception_handler)
 
 
+app.include_router(routers.auth.router)
 app.include_router(routers.system.router)
 app.include_router(routers.accounts.router)
 app.include_router(routers.voices.router)

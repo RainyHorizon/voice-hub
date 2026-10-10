@@ -74,6 +74,8 @@ sequenceDiagram
 - Windows 使用 Windows Credential Manager，macOS 使用 Keychain，Linux 使用 Secret Service/KWallet。
 - Docker 使用 `.env` 或部署平台 Secret，并以只读文件系统、非 root 用户、丢弃 Linux capabilities 和 `no-new-privileges` 运行。
 - `/v1/*` 接口必须携带 Gateway Key；默认服务地址只监听 `127.0.0.1`。
+- WebUI 管理接口默认启用单用户内置密码：首次打开时在浏览器创建密码，登录后通过 HttpOnly 会话 Cookie 访问 `/api/*` 管理接口；密码使用 PBKDF2-SHA256 哈希保存，服务端不保存明文。`/v1/*`、CLI 和 MCP 仍使用各自既有的 Gateway Key/私有通道认证，不与 WebUI 密码混用。
+- 忘记 WebUI 密码时，在服务器项目的 `backend` 目录运行 `python -m app.auth_admin reset`，按提示交互式输入新密码；也可以显式设置 `VOICE_STUDIO_AUTH_ENABLED=false` 暂时关闭 WebUI 密码保护。
 - 自定义厂商 Endpoint 默认只允许官方域名；启用自定义 Endpoint 时应确保目标可信，否则厂商 Key 可能被发送到错误服务。
 - 音频路径在读取、下载和清理前都会校验其位于 `data/audio` 目录内。
 - 账号元数据与系统密钥环发生跨存储写入时会保留旧凭据快照；SQLite 操作失败会执行补偿恢复，降低两边状态分裂的风险。

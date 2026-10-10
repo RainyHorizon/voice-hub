@@ -18,6 +18,7 @@ atexit.register(_TEST_ROOT.cleanup)
 os.environ["VOICE_STUDIO_ROOT"] = _TEST_ROOT.name
 os.environ["VOICE_STUDIO_CREDENTIALS_MODE"] = "env"
 os.environ["VOICE_STUDIO_GATEWAY_KEY"] = "unit-test-gateway-key"
+os.environ["VOICE_STUDIO_AUTH_ENABLED"] = "false"
 for name in (
     "VOICE_STUDIO_DASHSCOPE_API_KEY",
     "VOICE_STUDIO_VOLCENGINE_API_KEY",

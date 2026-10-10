@@ -241,3 +241,11 @@ export type SystemDiagnostics = {
   required_failures: number;
   demo: { model: string; voice: string; available: boolean };
 };
+
+export type AuthStatus = {
+  auth_enabled: boolean;
+  configured: boolean;
+  authenticated: boolean;
+  session_ttl_seconds: number;
+  password_min_length: number;
+};

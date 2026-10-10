@@ -9,10 +9,12 @@ import {
   Settings2,
   WandSparkles,
 } from "lucide-react";
-import { useEffect, useState, type ComponentType } from "react";
+import { useEffect, useState, type ComponentType, type ReactNode } from "react";
 import { Toaster } from "sonner";
 import { ConfirmProvider } from "./components/feedback/ConfirmProvider";
+import { AuthScreen } from "./components/AuthScreen";
 import { StudioProvider, useStudio } from "./context/StudioContext";
+import { api } from "./api";
 import { ClonePage } from "./pages/ClonePage";
 import { DesignPage } from "./pages/DesignPage";
 import { GatewayPage } from "./pages/GatewayPage";
@@ -21,6 +23,7 @@ import { SettingsPage } from "./pages/SettingsPage";
 import { SynthesisPage } from "./pages/SynthesisPage";
 import { VoicesPage } from "./pages/VoicesPage";
 import { titleFor } from "./utils";
+import type { AuthStatus } from "./types";
 
 const nav = [
   { id: "synthesize", label: "语音合成", icon: AudioLines },
@@ -119,12 +122,36 @@ function AppShell() {
   );
 }
 
+function AuthGate({ children }: { children: ReactNode }) {
+  const [status, setStatus] = useState<AuthStatus | null>(null);
+  const [error, setError] = useState("");
+  const load = () => {
+    setError("");
+    void api<AuthStatus>("/api/auth/status")
+      .then(setStatus)
+      .catch((reason) => setError(reason instanceof Error ? reason.message : "无法连接 Voice Hub"));
+  };
+  useEffect(() => {
+    load();
+    const handleExpired = () => setStatus((current) => current ? { ...current, authenticated: false } : current);
+    window.addEventListener("voice-hub-auth-expired", handleExpired);
+    return () => window.removeEventListener("voice-hub-auth-expired", handleExpired);
+  }, []);
+  if (!status) {
+    return <main className="auth-screen"><div className="auth-loading">{error || "正在连接 Voice Hub…"}{error && <button className="secondary-button" type="button" onClick={load}>重试</button>}</div></main>;
+  }
+  if (status.auth_enabled && (!status.configured || !status.authenticated)) {
+    return <AuthScreen mode={status.configured ? "login" : "setup"} status={status} onAuthenticated={load} />;
+  }
+  return <>{children}</>;
+}
+
 export default function App() {
   return (
     <ConfirmProvider>
-      <StudioProvider>
-        <AppShell />
-      </StudioProvider>
+      <AuthGate>
+        <StudioProvider><AppShell /></StudioProvider>
+      </AuthGate>
       <Toaster
         theme="light"
         position="top-right"

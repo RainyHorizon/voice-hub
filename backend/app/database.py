@@ -12,8 +12,9 @@ from typing import Any
 from . import config
 from .credentials import environment_credentials_enabled, environment_provider_credentials
 from .storage import init_storage_schema
+from .auth import init_auth_schema
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 def now() -> str:
@@ -119,6 +120,7 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_provider_projects_account ON provider_projects(provider_account_id);
             """
         )
+        init_auth_schema(connection)
         voice_columns = {row[1] for row in connection.execute("PRAGMA table_info(voices)").fetchall()}
         if "design_prompt" not in voice_columns:
             connection.execute("ALTER TABLE voices ADD COLUMN design_prompt TEXT NOT NULL DEFAULT ''")

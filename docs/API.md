@@ -7,6 +7,22 @@ Voice Hub 默认在本机 `http://127.0.0.1:8765` 提供管理 API 和 OpenAI �
 
 ## 鉴权
 
+### WebUI 管理密码
+
+WebUI 管理接口默认启用单用户密码。首次打开网页时调用 `GET /api/auth/status`，如果尚未设置密码，网页会显示创建密码页面；已有密码时需要先登录。登录成功后服务端通过 HttpOnly、SameSite Cookie 维持会话，密码只以 PBKDF2-SHA256 哈希形式保存在 SQLite 中。
+
+登录与首次设置密码页面沿用工作台的白蓝主题。“忘记密码？”展开后显示终端重置说明；登录后的密码修改和退出登录位于 **设置 → 账户安全**。
+
+| 路径 | 用途 |
+| --- | --- |
+| `GET /api/auth/status` | 查看是否启用、是否已设置密码和当前会话状态 |
+| `POST /api/auth/setup` | 首次设置密码，JSON 字段为 `password`、`confirmation` |
+| `POST /api/auth/login` | 登录，JSON 字段为 `password` |
+| `POST /api/auth/logout` | 注销当前 WebUI 会话 |
+| `POST /api/auth/password` | 登录后修改密码，需提供 `current_password`、`password`、`confirmation` |
+
+WebUI 密码只保护 `/api/*` 管理接口，不替代兼容接口的 Gateway Key。忘记密码时，在 `backend` 目录执行 `python -m app.auth_admin reset` 进行交互式重置。密码保护可以通过 `VOICE_STUDIO_AUTH_ENABLED=false` 明确关闭。
+
 网关接口使用 Bearer Key：
 
 ```http
