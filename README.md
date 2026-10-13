@@ -150,6 +150,8 @@ $env:VOICE_HUB_API_KEY = "<Gateway Key>"
 
 ## MCP 与 Agent Skill
 
+网页的“API 网关”上方固定展示密钥管理与当前 Key，切换下方内容时保持不变。**API 文档** 展示快速开始、安全提示、错误格式以及接入文档、接口测试与运行统计；切换到 **Agent Skills**，可查看技能源码、安装方式、MCP 地址和本机 CLI 检查命令。页面中的接入命令沿用当前服务地址，不会将网关 Key 填入技能安装或 CLI 检查命令。任务历史、设置与音色库的标题头在滚动时保持置顶。
+
 Voice Hub 在同一个服务和端口提供 Streamable HTTP MCP：
 
 ```text

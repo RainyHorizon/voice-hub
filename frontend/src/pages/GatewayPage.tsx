@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Activity,
+  BookOpen,
+  Bot,
   Check,
   ChevronRight,
   CircleHelp,
@@ -24,6 +26,7 @@ import { pcmChunksToWavBlob, type PcmInfo } from "../audio";
 import { ExclusiveAudio } from "../components/ExclusiveAudio";
 import { useConfirm } from "../components/feedback/ConfirmProvider";
 import { WorkspaceHero } from "../components/WorkspaceHero";
+import { GatewayAgentSkills } from "../components/GatewayAgentSkills";
 import { handleTabListKeyDown } from "../components/tabs";
 import { useStudio } from "../context/StudioContext";
 import type { GatewayStats } from "../types";
@@ -66,6 +69,7 @@ export function GatewayPage() {
   const [statsProvider, setStatsProvider] = useState("");
   const [statsLoading, setStatsLoading] = useState(false);
   const [gatewayView, setGatewayView] = useState<"docs" | "test" | "stats">("docs");
+  const [integrationView, setIntegrationView] = useState<"api" | "skills">("api");
   const [openEndpoint, setOpenEndpoint] = useState("");
   useEffect(() => setCurrent(gateway), [gateway]);
   const activeGateway = current || gateway;
@@ -396,21 +400,33 @@ export function GatewayPage() {
   ];
   return (
     <section className="page-section gateway-page">
-      <div className="gateway-header">
+      <header className="gateway-header workspace-sticky-header">
         <WorkspaceHero
           title="把 Voice Hub"
           accent="接入你的应用。"
           description="使用 OpenAI 兼容接口调用四家语音模型。外部应用只需要 Base URL 和网关 Key，厂商凭据始终留在本机后端。"
         />
-      </div>
+      </header>
 
-      <section className="gateway-overview-grid" aria-label="网关凭据与快速开始">
-        <div className="gateway-overview-primary">
-          <div className="gateway-current-key">
+      <section className="gateway-access-grid" aria-label="网关凭据管理">
+        <div className="gateway-connection-card">
+          <div className="gateway-access-title"><ShieldCheck size={21} /><h3>管理网关密钥</h3></div>
+          <p>Voice Hub 使用一枚统一的网关 Key，供已授权的应用连接本机语音服务。</p>
+          <div className="gateway-connection-field">
+            <span>当前凭据</span>
+            <div><strong>Voice Hub 网关</strong><button className="primary-button compact" disabled={!activeGateway?.managed || rotating} onClick={rotate}><RotateCcw size={15} className={rotating ? "spinning" : ""} />{rotating ? "正在轮换" : "轮换网关 Key"}</button></div>
+          </div>
+          <p className="gateway-key-management-note">{activeGateway?.managed ? "轮换后旧 Key 会立即失效，请同步更新客户端的连接配置。" : "当前 Key 由环境变量管理，请在本机配置中更新。"}</p>
+        </div>
+        <div className="gateway-key-card">
+          <div className="gateway-key-card-head">
             <div className="gateway-key-heading">
               <h3>当前网关 Key</h3>
-              <span className="gateway-key-state"><span className="live-dot" />有效</span>
+              <span className="gateway-key-state"><span className="live-dot" />{key ? "有效" : "未读取"}</span>
             </div>
+            <p>供外部应用访问 Voice Hub，厂商 API Key 仍由本机后端管理。</p>
+          </div>
+          <div className="gateway-key-card-body">
             <div className="gateway-key-value">
               <code>{visibleKey ? key : (activeGateway?.key_hint || "未读取")}</code>
               <button className="icon-button" onClick={() => setVisibleKey((value) => !value)} title={visibleKey ? "隐藏网关 Key" : "显示网关 Key"} aria-label={visibleKey ? "隐藏网关 Key" : "显示网关 Key"}>
@@ -420,48 +436,43 @@ export function GatewayPage() {
             </div>
             <div className="gateway-key-footer">
               <span>来源：{activeGateway?.key_source || "本地配置"}</span>
-              <button className="secondary-button" disabled={!activeGateway?.managed || rotating} onClick={rotate}>
-                <RotateCcw size={14} className={rotating ? "spinning" : ""} />
-                {rotating ? "正在轮换" : "轮换网关 Key"}
-              </button>
             </div>
-            {copied && <div className="copy-feedback"><Check size={14} />{copied}</div>}
-          </div>
-          <div className="gateway-quickstart-card">
-            <div className="gateway-quickstart-title">
-              <span><Code2 size={18} />快速开始</span>
-              <button className="quickstart-copy" onClick={() => copy("连接信息", `${base}\nBearer ${key}`)} title="复制连接信息"><Copy size={15} />复制</button>
-            </div>
-            <div className="gateway-quickstart-grid">
-              <div><span>Base URL</span><code>{base}</code></div>
-              <div><span>鉴权方式</span><code>Bearer $VOICE_STUDIO_API_KEY</code></div>
-            </div>
-            <p>把 Base URL 填入支持 OpenAI 的客户端，并将当前网关 Key 作为 API Key。</p>
-          </div>
-        </div>
-        <div className="gateway-overview-secondary">
-          <div className="gateway-credential-intro">
-            <h3>网关访问凭据</h3>
-            <p>这枚密钥用于本机应用访问统一语音网关，不会替代已保存的厂商 API Key。</p>
             <div className="gateway-credential-facts">
               <div><span>监听范围</span><strong>仅本机</strong></div>
               <div><span>管理方式</span><strong>{activeGateway?.managed ? "应用托管" : "环境变量"}</strong></div>
             </div>
           </div>
-          <aside className="gateway-quickstart-aside">
-            <div className="gateway-security-message">
-              <ShieldCheck size={21} />
-              <p>网关 Key 只应保存在受信任的本机应用中，不要放入公开网页、日志或源码仓库。</p>
-            </div>
-            <div className="gateway-error-format">
-              <Code2 size={19} />
-              <strong>错误格式</strong>
-              <p>失败响应包含稳定错误码与可读消息。</p>
-              <code>{'{"detail":{"code":"INVALID_API_KEY","message":"..."}}'}</code>
-            </div>
-          </aside>
+          <div className="gateway-key-card-note"><ShieldCheck size={17} /><p>只在受信任的应用中使用，不要将 Key 放入公开网页或源码仓库。</p></div>
         </div>
       </section>
+      <div className="gateway-copy-status" role="status">{copied && <><Check size={14} />{copied}</>}</div>
+
+      <div className="gateway-developer-heading">
+        <div><span className="gateway-eyebrow">使用 VOICE HUB 开发</span><h3>接入你的应用，也接入你的 Agent。</h3><p>直接调用兼容 API，或通过 Skill、MCP 与 CLI 使用语音能力。</p></div>
+        <div className="gateway-integration-tabs" role="tablist" aria-label="接入方式" onKeyDown={handleTabListKeyDown}>
+          <button id="gateway-integration-api" type="button" role="tab" aria-controls="gateway-api-content" aria-selected={integrationView === "api"} tabIndex={integrationView === "api" ? 0 : -1} onClick={() => setIntegrationView("api")}><BookOpen size={17} />API 文档</button>
+          <button id="gateway-integration-skills" type="button" role="tab" aria-controls="gateway-skills-content" aria-selected={integrationView === "skills"} tabIndex={integrationView === "skills" ? 0 : -1} onClick={() => setIntegrationView("skills")}><Bot size={17} />Agent Skills</button>
+        </div>
+      </div>
+
+      <div id="gateway-skills-content" role="tabpanel" aria-labelledby="gateway-integration-skills" hidden={integrationView !== "skills"} tabIndex={0}>
+        <GatewayAgentSkills base={base} copy={copy} />
+      </div>
+      <div id="gateway-api-content" role="tabpanel" aria-labelledby="gateway-integration-api" hidden={integrationView !== "api"} tabIndex={0}>
+      <div className="gateway-api-intro">
+        <article className="gateway-api-quickstart">
+          <div className="gateway-quickstart-title"><span><Code2 size={19} />快速开始</span><button className="quickstart-copy" onClick={() => copy("连接信息", `${base}\nBearer ${key}`)}><Copy size={15} />复制连接信息</button></div>
+          <div className="gateway-quickstart-grid">
+            <div><span>Base URL</span><div className="gateway-api-base"><code>{base}</code><button className="quickstart-copy" onClick={() => copy("Base URL", base)} aria-label="复制 Base URL"><Copy size={15} /></button></div></div>
+            <div><span>鉴权方式</span><code>Bearer $VOICE_STUDIO_API_KEY</code></div>
+          </div>
+          <p>把 Base URL 填入支持 OpenAI 的客户端，并将当前网关 Key 作为 API Key。每次请求通过 Bearer Token 鉴权。</p>
+        </article>
+        <div className="gateway-api-context">
+          <aside className="gateway-api-security"><ShieldCheck size={21} /><p>网关 Key 仅供受信任的应用使用，不要放入公开网页、提示词、日志或源码仓库。</p></aside>
+          <article className="gateway-api-error"><Code2 size={21} /><h3>错误格式</h3><p>失败响应使用 FastAPI detail 包装，包含稳定错误码与可读消息。</p><code>{'{"detail":{"code":"INVALID_API_KEY","message":"..."}}'}</code></article>
+        </div>
+      </div>
 
       <div className="gateway-view-tabs" role="tablist" aria-label="网关页面" onKeyDown={handleTabListKeyDown}>
         <button id="gateway-tab-docs" type="button" role="tab" aria-controls="gateway-panel-docs" aria-selected={gatewayView === "docs"} tabIndex={gatewayView === "docs" ? 0 : -1} className={gatewayView === "docs" ? "selected" : ""} onClick={() => setGatewayView("docs")}><Code2 size={16} />接入文档</button>
@@ -634,6 +645,7 @@ export function GatewayPage() {
           <pre>{examples[exampleTab]}</pre>
         </div>
       </div>}
+      </div>
     </section>
   );
 }

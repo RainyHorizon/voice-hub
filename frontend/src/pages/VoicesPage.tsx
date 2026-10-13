@@ -68,7 +68,7 @@ export function VoicesPage() {
   );
   return (
     <section className="page-section voice-library">
-      <div className="page-toolbar">
+      <header className="page-toolbar workspace-sticky-header">
         <div>
           <WorkspaceHero
             title="让每一个声音"
@@ -89,7 +89,7 @@ export function VoicesPage() {
             开始克隆
           </button>
         </div>
-      </div>
+      </header>
       <div className="voice-scope-tabs" role="group" aria-label="音色范围">
         <button type="button" aria-pressed={scope === "all"} className={scope === "all" ? "selected" : ""} onClick={() => setScope("all")}>全部音色</button>
         <button type="button" aria-pressed={scope === "mine"} className={scope === "mine" ? "selected" : ""} onClick={() => setScope("mine")}>我的音色</button>

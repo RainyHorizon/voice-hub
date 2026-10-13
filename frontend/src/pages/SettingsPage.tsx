@@ -46,18 +46,20 @@ export function SettingsPage() {
   const [section, setSection] = useState<"providers" | "aliases" | "storage" | "security" | "environment">("providers");
   return (
     <section className="page-section settings-shell">
-      <WorkspaceHero
-        title="把每个厂商"
-        accent="放进同一个工作台。"
-        description="统一管理厂商凭据、生成文件存储策略和本机运行环境。"
-      />
-      <div className="settings-navigation" role="tablist" aria-label="设置分类" onKeyDown={handleTabListKeyDown}>
-        <button id="settings-tab-providers" className={section === "providers" ? "selected" : ""} type="button" role="tab" aria-controls="settings-panel-providers" aria-selected={section === "providers"} tabIndex={section === "providers" ? 0 : -1} onClick={() => setSection("providers")}><KeyRound size={18} />厂商账号</button>
-        <button id="settings-tab-aliases" className={section === "aliases" ? "selected" : ""} type="button" role="tab" aria-controls="settings-panel-aliases" aria-selected={section === "aliases"} tabIndex={section === "aliases" ? 0 : -1} onClick={() => setSection("aliases")}><Route size={18} />默认模型</button>
-        <button id="settings-tab-storage" className={section === "storage" ? "selected" : ""} type="button" role="tab" aria-controls="settings-panel-storage" aria-selected={section === "storage"} tabIndex={section === "storage" ? 0 : -1} onClick={() => setSection("storage")}><HardDrive size={18} />存储与清理</button>
-        <button id="settings-tab-security" className={section === "security" ? "selected" : ""} type="button" role="tab" aria-controls="settings-panel-security" aria-selected={section === "security"} tabIndex={section === "security" ? 0 : -1} onClick={() => setSection("security")}><LockKeyhole size={18} />账户安全</button>
-        <button id="settings-tab-environment" className={section === "environment" ? "selected" : ""} type="button" role="tab" aria-controls="settings-panel-environment" aria-selected={section === "environment"} tabIndex={section === "environment" ? 0 : -1} onClick={() => setSection("environment")}><ShieldCheck size={18} />运行环境</button>
-      </div>
+      <header className="workspace-sticky-header">
+        <WorkspaceHero
+          title="把每个厂商"
+          accent="放进同一个工作台。"
+          description="统一管理厂商凭据、生成文件存储策略和本机运行环境。"
+        />
+        <div className="settings-navigation" role="tablist" aria-label="设置分类" onKeyDown={handleTabListKeyDown}>
+          <button id="settings-tab-providers" className={section === "providers" ? "selected" : ""} type="button" role="tab" aria-controls="settings-panel-providers" aria-selected={section === "providers"} tabIndex={section === "providers" ? 0 : -1} onClick={() => setSection("providers")}><KeyRound size={18} />厂商账号</button>
+          <button id="settings-tab-aliases" className={section === "aliases" ? "selected" : ""} type="button" role="tab" aria-controls="settings-panel-aliases" aria-selected={section === "aliases"} tabIndex={section === "aliases" ? 0 : -1} onClick={() => setSection("aliases")}><Route size={18} />默认模型</button>
+          <button id="settings-tab-storage" className={section === "storage" ? "selected" : ""} type="button" role="tab" aria-controls="settings-panel-storage" aria-selected={section === "storage"} tabIndex={section === "storage" ? 0 : -1} onClick={() => setSection("storage")}><HardDrive size={18} />存储与清理</button>
+          <button id="settings-tab-security" className={section === "security" ? "selected" : ""} type="button" role="tab" aria-controls="settings-panel-security" aria-selected={section === "security"} tabIndex={section === "security" ? 0 : -1} onClick={() => setSection("security")}><LockKeyhole size={18} />账户安全</button>
+          <button id="settings-tab-environment" className={section === "environment" ? "selected" : ""} type="button" role="tab" aria-controls="settings-panel-environment" aria-selected={section === "environment"} tabIndex={section === "environment" ? 0 : -1} onClick={() => setSection("environment")}><ShieldCheck size={18} />运行环境</button>
+        </div>
+      </header>
       {section === "providers" && <ProviderSettings models={models} panelId="settings-panel-providers" labelledBy="settings-tab-providers" />}
       {section === "aliases" && <ModelAliasSettings models={models} panelId="settings-panel-aliases" labelledBy="settings-tab-aliases" />}
       {section === "storage" && <StorageSettings onJobsChanged={onJobsChanged} panelId="settings-panel-storage" labelledBy="settings-tab-storage" />}

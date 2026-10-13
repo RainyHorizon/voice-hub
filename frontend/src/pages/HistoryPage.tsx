@@ -314,33 +314,35 @@ export function HistoryPage() {
 
   return (
     <section className="page-section history-page">
-      <WorkspaceHero
-        title="每一次生成"
-        accent="都留下可追溯的声音。"
-        description="按日期浏览生成任务，试听、下载文字记录与音频，或批量整理历史文件。"
-      />
-      <div className="history-command-bar">
-        <HistoryDateMenu filter={dateFilter} onChange={changeFilter} />
-        <div className="history-command-actions">
-          <button className={batchMode ? "secondary-button active" : "secondary-button"} type="button" onClick={toggleBatchMode}>
-            <ListChecks size={17} />
-            {batchMode ? "退出批量管理" : "批量管理"}
-          </button>
-          <button className={working ? "icon-button history-refresh working" : "icon-button history-refresh"} type="button" onClick={() => void refresh()} disabled={working} title="刷新任务历史" aria-label="刷新任务历史"><RefreshCw size={18} /></button>
-        </div>
-      </div>
-      {batchMode && (
-        <div className="history-selection-bar">
-          <div className="history-selection-summary">
-            <span>已选择 <strong>{selectedJobs.length}</strong> 条</span>
-            <button className="inline-action" type="button" onClick={toggleAll} disabled={!visibleIds.length}>{allVisibleSelected ? "取消全选" : "全选"}</button>
-          </div>
-          <div className="history-selection-actions">
-            <button className="secondary-button" type="button" onClick={() => void downloadZip()} disabled={working || !selectedJobs.length}><Download size={16} />下载 ZIP</button>
-            <button className="danger-button" type="button" onClick={() => void deleteSelected()} disabled={working || !selectedJobs.length}><Trash2 size={16} />删除</button>
+      <header className="workspace-sticky-header">
+        <WorkspaceHero
+          title="每一次生成"
+          accent="都留下可追溯的声音。"
+          description="按日期浏览生成任务，试听、下载文字记录与音频，或批量整理历史文件。"
+        />
+        <div className="history-command-bar">
+          <HistoryDateMenu filter={dateFilter} onChange={changeFilter} />
+          <div className="history-command-actions">
+            <button className={batchMode ? "secondary-button active" : "secondary-button"} type="button" onClick={toggleBatchMode}>
+              <ListChecks size={17} />
+              {batchMode ? "退出批量管理" : "批量管理"}
+            </button>
+            <button className={working ? "icon-button history-refresh working" : "icon-button history-refresh"} type="button" onClick={() => void refresh()} disabled={working} title="刷新任务历史" aria-label="刷新任务历史"><RefreshCw size={18} /></button>
           </div>
         </div>
-      )}
+        {batchMode && (
+          <div className="history-selection-bar">
+            <div className="history-selection-summary">
+              <span>已选择 <strong>{selectedJobs.length}</strong> 条</span>
+              <button className="inline-action" type="button" onClick={toggleAll} disabled={!visibleIds.length}>{allVisibleSelected ? "取消全选" : "全选"}</button>
+            </div>
+            <div className="history-selection-actions">
+              <button className="secondary-button" type="button" onClick={() => void downloadZip()} disabled={working || !selectedJobs.length}><Download size={16} />下载 ZIP</button>
+              <button className="danger-button" type="button" onClick={() => void deleteSelected()} disabled={working || !selectedJobs.length}><Trash2 size={16} />删除</button>
+            </div>
+          </div>
+        )}
+      </header>
       {message && <div className="history-message"><Activity size={14} />{message}</div>}
       {groups.length === 0 ? (
         <div className="empty-state history-empty"><Clock3 size={22} /><span>{dateFilter.kind === "all" ? "还没有任务，去语音合成生成第一条语音。" : "这个日期范围内没有任务记录。"}</span></div>
