@@ -1,6 +1,6 @@
 # 架构说明
 
-Voice Hub 是单机优先的 React + FastAPI 云端语音聚合应用。浏览器只访问本机后端，后端通过远程 API 调用语音厂商；应用本身不加载或运行本地语音模型。厂商密钥不会进入前端代码，也不会由浏览器直接发送到厂商。
+Voice Hub 是单用户、本地优先的 React + FastAPI 语音聚合应用。浏览器访问自行部署的后端，后端调用云端语音厂商或独立 HTTP 插件服务；核心本身不直接加载语音模型。厂商凭据由后端管理，生成所需文本和参考音频会发送至所选服务。
 
 ```mermaid
 flowchart LR
@@ -16,6 +16,8 @@ flowchart LR
     Providers --> Volc[火山引擎]
     Providers --> MiniMax[MiniMax]
     Providers --> MiMo[小米 MiMo]
+    Providers --> External[外部 HTTP 适配器]
+    External --> Plugin[独立插件服务]
 ```
 
 ## 目录职责
@@ -36,6 +38,8 @@ flowchart LR
 | `backend/app/database.py` | SQLite 连接策略、schema 版本、迁移和初始数据 |
 | `backend/app/config.py` | 版本、端口、路径、官方 Endpoint 和本机安全边界 |
 | `backend/app/providers/` | 各厂商 TTS、流式、克隆和设计能力的适配器 |
+| `backend/app/plugin_protocol.py`、`backend/app/plugins.py` | 插件清单、声明式配置、目录验证与注册生命周期 |
+| `backend/app/providers/external.py` | 调用独立插件服务并验证返回的 PCM WAV |
 | `backend/app/credentials.py` | 系统密钥环和 Docker 环境变量凭据读取/保存 |
 | `backend/app/storage.py` | 存储策略、容量统计和自动清理计划 |
 | `backend/tests/conftest.py` | pytest 临时根目录、凭据环境清理和外网访问拦截 |
@@ -45,6 +49,7 @@ flowchart LR
 | `data/voice_studio.db` | 任务、音色、厂商账号元数据；不保存完整 API Key |
 | `data/audio/` | 生成音频、参考音频和设计试听文件 |
 | `data/logs/` | 启动器和运行时日志；升级时与其他用户数据一并保留 |
+| `data/plugin-state.json` | 插件启用状态、配置和模型/音色目录缓存；不用于保存厂商凭据 |
 
 ## 一次合成请求
 
@@ -75,15 +80,15 @@ sequenceDiagram
 - Windows 使用 Windows Credential Manager，macOS 使用 Keychain，Linux 使用 Secret Service/KWallet。
 - Docker 使用 `.env` 或部署平台 Secret，并以只读文件系统、非 root 用户、丢弃 Linux capabilities 和 `no-new-privileges` 运行。
 - `/v1/*` 接口必须携带 Gateway Key；默认服务地址只监听 `127.0.0.1`。
-- WebUI 管理接口默认启用单用户内置密码：首次打开时在浏览器创建密码，登录后通过 HttpOnly 会话 Cookie 访问 `/api/*` 管理接口；密码使用 PBKDF2-SHA256 哈希保存，服务端不保存明文。`/v1/*`、CLI 和 MCP 仍使用各自既有的 Gateway Key/私有通道认证，不与 WebUI 密码混用。
-- 忘记 WebUI 密码时，在服务器项目的 `backend` 目录运行 `python -m app.auth_admin reset`，按提示交互式输入新密码；也可以显式设置 `VOICE_STUDIO_AUTH_ENABLED=false` 暂时关闭 WebUI 密码保护。
+- WebUI 管理接口默认启用单用户内置密码：首次打开时在浏览器创建密码，登录后通过 HttpOnly 会话 Cookie 访问 `/api/*` 管理接口；密码使用 PBKDF2-SHA256 哈希保存，服务端不保存明文。`/api/summary` 和认证流程端点例外；`/v1/*` 使用 Gateway Key。MCP 没有独立认证，由部署的私有通道保护。
+- 忘记 WebUI 密码时，使用应用环境运行 `python -m app.auth_admin reset`，必须指向同一数据根目录；重置会注销旧 WebUI 会话。具体命令见 [使用指南](USAGE.md#忘记-webui-管理密码)。
 - 自定义厂商 Endpoint 默认只允许官方域名；启用自定义 Endpoint 时应确保目标可信，否则厂商 Key 可能被发送到错误服务。
 - 音频路径在读取、下载和清理前都会校验其位于 `data/audio` 目录内。
 - 账号元数据与系统密钥环发生跨存储写入时会保留旧凭据快照；SQLite 操作失败会执行补偿恢复，降低两边状态分裂的风险。
-- CLI 在环回地址调用时可通过受限的本机管理接口取得 Gateway Key；远程地址不会自动读取 Key，必须显式提供 `VOICE_HUB_API_KEY`，且默认拒绝通过远程明文 HTTP 传输凭据。
+- CLI 在环回地址调用时会尝试通过管理接口读取 Gateway Key；启用 WebUI 密码后该请求仍需管理会话，而当前 CLI 不提供会话登录。兼容接口操作需显式配置 `VOICE_HUB_API_KEY`；音色和历史等管理操作还受会话限制。远程地址不会自动读取 Key，默认拒绝通过远程明文 HTTP 传输凭据。
 - MCP 与 WebUI 共用端口，通过 Streamable HTTP `/mcp` 提供；它不返回 Gateway Key、厂商 Key 或服务器音频路径，也不开放账号管理、音色删除、更新和克隆/设计管理工具。
-- `create_speech` 是唯一会主动访问远程厂商的 MCP 工具，标记为非只读、非破坏性、开放世界操作；其余 MCP 工具均为只读。大音频受 `VOICE_STUDIO_MCP_MAX_AUDIO_BYTES` 限制。
-- 当前 MCP 没有公网 OAuth，只允许环回地址、受控私有通道或 Secure MCP Tunnel 使用。公开服务需要单独设计 OAuth、限流和多用户隔离。
+- `create_speech` 调用厂商或插件进行合成，标记为非只读、非破坏性、开放世界操作；其余 MCP 工具均为只读。大音频受 `VOICE_STUDIO_MCP_MAX_AUDIO_BYTES` 限制。
+- 当前 MCP 没有身份认证或公网 OAuth，仅适合部署在环回地址或受控私有通道。公开服务需要单独设计 OAuth、限流和多用户隔离。
 
 ## 存储生命周期
 
@@ -110,13 +115,35 @@ sequenceDiagram
 
 ## 应用装配与生命周期
 
-`backend/app/main.py` 创建 `FastAPI(title="Voice Hub Gateway", version=config.APP_VERSION)`，统一挂载 `system`、`accounts`、`voices`、`gateway`、`jobs` 和 `storage` 路由，并在 SPA catch-all 之前加入 MCP 的精确 `/mcp` 路由。若 `frontend/dist` 存在，则挂载 `/assets` 并用最后的 catch-all 路由返回 SPA 的 `index.html`；因此 API 与 MCP 路由必须继续在静态 SPA 路由之前注册。
+`backend/app/main.py` 创建 `FastAPI(title="Voice Hub Gateway", version=config.APP_VERSION)`，统一挂载 `auth`、`system`、`accounts`、`voices`、`gateway`、`jobs`、`storage` 和 `plugins` 路由，并在 SPA catch-all 之前加入 MCP 的精确 `/mcp` 路由。若 `frontend/dist` 存在，则挂载 `/assets` 并用最后的 catch-all 路由返回 SPA 的 `index.html`；因此 API 与 MCP 路由必须继续在静态 SPA 路由之前注册。
 
 应用 lifespan 的启动顺序是：创建 `data/audio` 与 `data/logs`、迁移已知旧日志、初始化 SQLite schema、执行一次到期清理、启动 MCP Streamable HTTP session manager，然后启动每小时一次的后台清理任务。关闭时按相反顺序退出，避免 MCP 子应用已挂载但 session manager 未运行。运行时根目录由 `VOICE_STUDIO_ROOT` 决定，默认是仓库根目录；端口由 `VOICE_STUDIO_PORT` 决定，默认 `8765`。
 
 ## 部署与 CI 边界
 
-Dockerfile 使用 Node 22 构建前端、Python 3.12 运行后端，并以非 root `voice` 用户启动 Uvicorn。Compose 将宿主机端口绑定到 `127.0.0.1`，只读挂载 `./data`，容器根文件系统只读，并通过 `GET /api/summary` 健康检查。镜像构建和 Compose 配置校验由 `.github/workflows/ci.yml` 覆盖。推送 `v*.*.*` 标签后，`.github/workflows/release.yml` 构建 Windows、Linux、macOS 发布包并创建 GitHub Release，`.github/workflows/docker-publish.yml` 独立构建并推送 `linux/amd64`、`linux/arm64` 的 GHCR 镜像。
+Dockerfile 使用 Node 22 构建前端、Python 3.12 运行后端，并以非 root `voice` 用户启动 Uvicorn。Compose 将宿主机端口绑定到 `127.0.0.1`，挂载可写的 `./data`；1Panel 模板使用可写命名卷。容器根文件系统只读，镜像通过 `GET /api/summary` 健康检查。镜像构建和 Compose 配置校验由 `.github/workflows/ci.yml` 覆盖。推送 `v*.*.*` 标签后，`.github/workflows/release.yml` 构建 Windows、Linux、macOS 发布包并创建 GitHub Release，`.github/workflows/docker-publish.yml` 独立构建并推送 `linux/amd64`、`linux/arm64` 的 GHCR 镜像；仅推送 `main` 不发布新包。
 
-当前源码基线已验证：后端 `python -m pytest -q tests` 为 81 项通过；前端 `npm run lint`、`npm test`（2 个文件、9 项）和 `npm run build` 均通过。CI 还会在三种操作系统上验证测试与系统密钥环，但这些检查不替代目标机器上的桌面密钥环和 FFmpeg 实机诊断。
+CI 在三种操作系统上运行测试、前端检查与构建，并在 macOS/Linux 验证系统密钥环。测试结果以对应提交的工作流为准，不代替目标机器上的密钥环、FFmpeg 和厂商合成诊断。
+
+## 本地开发检查
+
+启动方法见 [README](../README.md#从源码运行)。源码构建推荐 Node.js 22.12+，Python 3.11+，并准备 FFmpeg/FFprobe。
+
+后端在 `backend` 目录使用虚拟环境安装依赖和测试工具：
+
+```bash
+python -m pip install -r requirements.txt pytest==8.3.5
+python -m pytest -q tests
+```
+
+前端在 `frontend` 目录执行：
+
+```bash
+npm ci
+npm run lint
+npm test
+npm run build
+```
+
+不要把测试数据、系统凭据、真实 `.env`、音频、构建产物或虚拟环境提交到仓库。新增外部语音服务优先参考 [插件协议](PLUGIN_DEVELOPMENT.md)，避免在核心加入其依赖。
 

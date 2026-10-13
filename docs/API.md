@@ -7,27 +7,21 @@ Voice Hub 默认在本机 `http://127.0.0.1:8765` 提供管理 API 和 OpenAI �
 
 ## 鉴权
 
-插件管理接口沿用 WebUI 会话认证，不能使用网关 Key 代替管理密码：
+三类接口的认证不同：
 
-| 路径 | 用途 |
+| 接口 | 认证方式 |
 | --- | --- |
-| GET /api/plugins | 已安装清单、状态、配置与音色数量 |
-| GET /api/plugins/market | 可选示例列表，当前不连接公共市场 |
-| POST /api/plugins/refresh | 重新扫描本机清单 |
-| POST /api/plugins/{id}/install | 安装本机可用的已知示例；没有随本次核心仓库提交示例服务 |
-| POST /api/plugins/{id}/enable、disable | 验证连接并启用，或停用 |
-| POST /api/plugins/{id}/refresh | 同步模型与音色目录 |
-| POST /api/plugins/{id}/check | JSON `{"config":{...}}`，只检查连接，不保存 |
-| PUT /api/plugins/{id}/config | JSON `{"config":{...}}`，校验并保存配置 |
-| DELETE /api/plugins/{id} | 卸载注册，保留音频与服务文件 |
+| `/api/*` 管理接口 | WebUI 登录会话 Cookie；`/api/summary` 和认证流程端点例外 |
+| `/v1/*` 兼容接口 | Gateway Key，使用 Bearer Header |
+| `/mcp` | 当前无独立身份认证或 OAuth，仅用于本机或受控私有通道 |
 
-插件 HTTP 协议、服务启动与卸载备份说明见 [插件开发文档](PLUGIN_DEVELOPMENT.md)。
+管理密码与 Gateway Key 不能互相替代。WebUI 登录不会自动为 CLI 建立会话，Gateway Key 也不能用于解锁管理接口。
 
 ### WebUI 管理密码
 
 WebUI 管理接口默认启用单用户密码。首次打开网页时调用 `GET /api/auth/status`，如果尚未设置密码，网页会显示创建密码页面；已有密码时需要先登录。登录成功后服务端通过 HttpOnly、SameSite Cookie 维持会话，密码只以 PBKDF2-SHA256 哈希形式保存在 SQLite 中。
 
-登录与首次设置密码页面沿用工作台的白蓝主题。“忘记密码？”展开后显示终端重置说明；登录后的密码修改和退出登录位于 **设置 → 账户安全**。
+登录后的密码修改和退出登录位于 **设置 → 账户安全**。
 
 | 路径 | 用途 |
 | --- | --- |
@@ -37,7 +31,7 @@ WebUI 管理接口默认启用单用户密码。首次打开网页时调用 `GET
 | `POST /api/auth/logout` | 注销当前 WebUI 会话 |
 | `POST /api/auth/password` | 登录后修改密码，需提供 `current_password`、`password`、`confirmation` |
 
-WebUI 密码只保护 `/api/*` 管理接口，不替代兼容接口的 Gateway Key。忘记密码时，在 `backend` 目录执行 `python -m app.auth_admin reset` 进行交互式重置。密码保护可以通过 `VOICE_STUDIO_AUTH_ENABLED=false` 明确关闭。
+WebUI 密码只保护 `/api/*` 管理接口，不替代兼容接口的 Gateway Key，也不保护 `/mcp`。忘记密码时，在 `backend` 目录用应用的 Python 环境执行 `python -m app.auth_admin reset` 进行交互式重置；Docker 使用 `docker compose exec voice-hub python -m app.auth_admin reset`。运行环境和数据目录要求见 [使用指南](USAGE.md#忘记-webui-管理密码)。密码保护可以通过 `VOICE_STUDIO_AUTH_ENABLED=false` 明确关闭，仅适用于可信本机环境。
 
 网关接口使用 Bearer Key：
 
@@ -45,7 +39,7 @@ WebUI 密码只保护 `/api/*` 管理接口，不替代兼容接口的 Gateway K
 Authorization: Bearer <Gateway Key>
 ```
 
- Gateway Key 可在网页的“API 网关”页面查看或轮换。`GET /api/gateway` 默认只返回脱敏提示；只有本机可信网页明确请求 `?reveal=true` 时才返回完整 Key。远程部署不要依赖该接口自动获取密钥。不要把厂商 API Key 放入客户端请求；网关会在本机后端读取系统密钥环或 Docker 环境变量。
+Gateway Key 可在网页的“API 网关”页面查看或轮换。`GET /api/gateway` 默认只返回脱敏提示；只有满足管理认证与本机请求检查的调用显式传入 `?reveal=true` 时才返回完整 Key。环境变量管理的 Key 不能在网页轮换。远程部署不要依赖该接口自动获取密钥。不要把厂商 API Key 放入客户端请求；网关会在后端读取系统密钥环或 Docker 环境变量。
 
 ## MCP
 
@@ -87,13 +81,13 @@ Skill 资源使用 `skill://voice-hub-tts/...` URI，并带 SHA-256 摘要。客
 
 ### 安全边界
 
-当前 MCP 没有独立的公网 OAuth 登录，默认只适合环回地址、SSH/Tailscale 私有通道或 Secure MCP Tunnel。不要直接把 `8765` 或 `/mcp` 反向代理到公网；公开插件需要稳定 HTTPS、OAuth、访问控制和限流，这不在当前实现范围内。
+当前 MCP 没有独立身份认证或 OAuth，WebUI 密码和网关 Bearer Key 不保护该端点。能连接的客户端可以调用工具，包括读取历史音频与生成语音。默认只适合环回地址或带访问控制的 SSH/Tailscale 等私有通道；若使用 MCP 隧道，应由隧道服务负责身份验证。不要直接将 `/mcp` 公开反向代理到互联网。
 
 ## OpenAI 兼容接口
 
 ### `GET /v1/models`
 
-返回已配置厂商的模型列表，以及模型支持的操作、克隆能力和流式能力。
+返回已配置厂商及已启用插件的模型列表，以及模型支持的操作、克隆能力和流式能力。
 
 ### `GET /v1/models/{model_id}`
 
@@ -105,7 +99,7 @@ Skill 资源使用 `skill://voice-hub-tts/...` URI，并带 SHA-256 摘要。客
 | `tts-fast` | 低延迟模型 |
 | `tts-hq` | 高质量模型 |
 
-三个别名可以在网页的“设置 → 默认模型”区域修改，分别绑定到任意已配置且支持语音合成的模型。修改后立即生效；恢复默认会指向 `mimo/mimo-v2.5-tts`、`dashscope/qwen3-tts-flash`、`mimo/mimo-v2.5-tts`。也可以使用本地管理接口读取或修改：`GET /api/gateway/aliases`、`PUT /api/gateway/aliases/{alias}`、`POST /api/gateway/aliases/reset`。
+三个别名可以在网页的“设置 → 默认模型”区域修改，分别绑定到任意已配置且支持语音合成的模型。修改后立即生效；恢复默认会指向 `mimo/mimo-v2.5-tts`、`dashscope/qwen3-tts-flash`、`mimo/mimo-v2.5-tts`。也可以使用需登录会话的管理接口读取或修改：`GET /api/gateway/aliases`、`PUT /api/gateway/aliases/{alias}`、`POST /api/gateway/aliases/reset`。修改绑定后需选择新模型的兼容音色。
 
 ### `POST /v1/audio/speech`
 
@@ -126,7 +120,7 @@ Skill 资源使用 `skill://voice-hub-tts/...` URI，并带 SHA-256 摘要。客
 
 ### `POST /v1/audio/speech/stream`
 
-通过 Server-Sent Events（SSE）返回音频分片。请求体与上一个接口相同，并可增加：
+这是 Voice Hub 的扩展接口，通过 Server-Sent Events（SSE）返回音频分片；不代表所有 OpenAI 客户端都支持此路径与事件格式。原生流式由模型能力决定，不支持时使用合成后的分片回退。请求体与上一个接口相同，并可增加：
 
 | 字段 | 类型 | 默认值 | 说明 |
 | --- | --- | ---: | --- |
@@ -140,13 +134,13 @@ Skill 资源使用 `skill://voice-hub-tts/...` URI，并带 SHA-256 摘要。客
 | `done` | `job_id`、`provider`、`native_streaming` | 流式生成完成 |
 | `error` | `code`、`message` | 生成或上游请求失败 |
 
-示例：
+Bash 示例（`VOICE_HUB_API_KEY` 为已设置的 Gateway Key；需先配置 MiMo）：
 
 ```bash
-curl.exe -N "http://127.0.0.1:8765/v1/audio/speech/stream" \
-  -H "Authorization: Bearer $VOICE_STUDIO_GATEWAY_KEY" \
+curl -N "http://127.0.0.1:8765/v1/audio/speech/stream" \
+  -H "Authorization: Bearer $VOICE_HUB_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"model":"tts-default","voice":"mimo-default","input":"你好","response_format":"mp3"}'
+  -d '{"model":"mimo/mimo-v2.5-tts","voice":"mimo-default","input":"你好","response_format":"mp3"}'
 ```
 
 ## 错误格式
@@ -175,7 +169,7 @@ curl.exe -N "http://127.0.0.1:8765/v1/audio/speech/stream" \
 
 ## 本地管理 API
 
-网页界面使用 `/api/*` 管理接口完成账号、音色、任务和存储操作。这些接口默认只绑定本机，不是面向公网的独立用户管理 API。部署到局域网或公网前，应增加管理认证、HTTPS 和限流。
+网页界面使用 `/api/*` 管理接口完成账号、音色、任务和存储操作。它们默认由单用户 WebUI 会话保护，不提供多用户权限隔离。部署到局域网或公网前，保留内置认证，并配置 HTTPS、可信 Host/Origin、外层访问控制和限流。CLI 当前不能自动建立 WebUI 会话，访问这些接口的限制见 [使用指南](USAGE.md#命令行使用)。
 
 主要资源：
 
@@ -190,4 +184,23 @@ curl.exe -N "http://127.0.0.1:8765/v1/audio/speech/stream" \
 | `/api/jobs` | 查询、下载、导出和删除任务 |
 | `/api/storage` | 读取和更新存储策略 |
 | `/api/gateway` | 读取本机网关配置 |
+
+### 插件管理
+
+插件管理沿用 WebUI 会话，不能使用 Gateway Key 代替：
+
+| 方法与路径 | 用途 |
+| --- | --- |
+| `GET /api/plugins` | 已安装清单、状态、声明式配置与音色数量 |
+| `GET /api/plugins/market` | 可选示例清单；没有可用示例时返回空数组，不连接公共市场 |
+| `POST /api/plugins/refresh` | 重新扫描本机注册目录 |
+| `POST /api/plugins/{id}/install` | 注册实现中已知且本机存在的示例清单，不下载依赖或启动服务 |
+| `POST /api/plugins/{id}/enable` | 验证服务身份与目录后启用 |
+| `POST /api/plugins/{id}/disable` | 停用，保留历史与配置 |
+| `POST /api/plugins/{id}/refresh` | 同步模型与音色目录 |
+| `POST /api/plugins/{id}/check` | JSON `{"config":{...}}`，检查连接，不保存或启用 |
+| `PUT /api/plugins/{id}/config` | JSON `{"config":{...}}`，校验并保存配置 |
+| `DELETE /api/plugins/{id}` | 卸载注册；保留历史音频并备份注册目录 |
+
+新插件通过清单文件注册，不通过示例安装接口上传。服务协议、配置字段和卸载行为见 [插件开发文档](PLUGIN_DEVELOPMENT.md)。
 

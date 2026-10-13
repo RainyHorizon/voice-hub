@@ -2,7 +2,9 @@
 
 Use these commands only when the Voice Hub MCP tools are unavailable or when the user needs a local file. The examples use the repository launcher `voicehub.cmd`; packaged builds can use `VoiceHub.exe cli` with the same arguments.
 
-The local service defaults to `http://127.0.0.1:8765`. A local CLI can discover the Gateway Key automatically. For a remote HTTPS server, use `VOICE_HUB_BASE_URL` and `VOICE_HUB_API_KEY`; never print the key.
+The local service defaults to `http://127.0.0.1:8765`. Set `VOICE_HUB_BASE_URL` when using another port or a remote HTTPS server. Keep the Gateway Key in `VOICE_HUB_API_KEY`; never print it.
+
+The current CLI does not implement WebUI login or session cookies. With WebUI password protection enabled, Gateway Key discovery and management endpoints require a session: supply the Gateway Key explicitly for `doctor`, `models`, and `speak`. `voices`, `jobs`, and `download` still require management access; a Gateway Key alone does not authorize them. Prefer connected MCP tools or the authenticated WebUI for these operations. Do not disable authentication merely to make a command work. The management examples below apply only where management access is already available.
 
 ## Inspect before generating
 
@@ -12,7 +14,7 @@ The local service defaults to `http://127.0.0.1:8765`. A local CLI can discover 
 .\voicehub.cmd voices --model tts-default
 ```
 
-Use the `voice` value returned by `voices`, not a guessed display name.
+Use the calling name returned by `voices` or an ID already queried through MCP/the authenticated WebUI, not a guessed display name. Resolve the model/voice pair before generating.
 
 ## Generate an audio file
 

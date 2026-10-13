@@ -10,7 +10,7 @@ Use an already connected Voice Hub MCP server when its tools are available. Use 
 ## Choose a path
 
 - MCP: call `get_voice_hub_status`, `list_tts_models`, `list_voices`, `create_speech`, `list_recent_speech_jobs`, `get_speech_job`, or `get_speech_audio`.
-- CLI: read [references/cli.md](references/cli.md) only when CLI commands are needed.
+- CLI: read [references/cli.md](references/cli.md) only when CLI commands are needed, including its WebUI session limitations. Do not treat a Gateway Key as management authentication.
 - If neither is available, explain that Voice Hub must be running and connected; do not substitute another TTS service without the user's request.
 
 ## Generate speech
@@ -19,6 +19,6 @@ Use an already connected Voice Hub MCP server when its tools are available. Use 
 2. Query compatible voices for that model. Never invent or infer a voice ID from its display name.
 3. If text, voice, or model is materially ambiguous, ask for the missing choice. Do not generate sample audio merely to test a guess.
 4. Call the generation operation only after the user explicitly asks to create audio. It may contact a remote provider and incur charges.
-5. Report the resolved model, voice, task ID, format, and returned audio or saved file. If MCP reports that audio is too large, use the CLI download flow when available.
+5. Report the resolved model, voice, task ID, format, and returned audio or saved file. If MCP reports that audio is too large, use the CLI download flow only where management access is available; otherwise direct the user to the authenticated WebUI.
 
 Keep credentials, server filesystem paths, and hidden provider identifiers out of the response. Prefer MP3 unless the user requests another format.

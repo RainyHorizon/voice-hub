@@ -7,6 +7,8 @@
 3. 等待浏览器自动打开 Voice Hub。
 4. 使用期间不要关闭启动窗口；也可以双击 `停止 Voice Hub.bat` 停止服务。
 
+首次打开页面后创建 WebUI 管理密码，在 **设置 → 厂商账号** 配置凭据，再选择相应模型和音色生成语音。合成会向所选厂商发送必要的文本或参考音频，可能产生费用。
+
 ## 更新
 
 1. 先关闭正在运行的 Voice Hub。
@@ -27,11 +29,10 @@
 ```powershell
 .\voicehub.cmd doctor
 .\voicehub.cmd models
-.\voicehub.cmd voices --model tts-default
-.\voicehub.cmd speak "你好" --voice mimo-default --output .\voice.mp3
+.\voicehub.cmd speak "你好" --model mimo/mimo-v2.5-tts --voice mimo-default --output .\voice.mp3
 ```
 
-本机调用会自动读取正在运行服务的 Gateway Key。运行 `.\voicehub.cmd --help` 可以查看全部命令和参数。
+上述示例需要先配置 MiMo，并在当前终端设置 `VOICE_HUB_API_KEY` 为 Gateway Key。运行 `.\voicehub.cmd --help` 查看参数。启用 WebUI 密码后自动读取 Key 受管理会话保护；CLI 当前没有网页登录，音色、历史查询及下载还受会话限制，可改用 WebUI 或私有 MCP。非默认端口需设置 `VOICE_HUB_BASE_URL` 为实际地址。
 
 ## MCP
 
@@ -41,11 +42,11 @@
 http://127.0.0.1:8765/mcp
 ```
 
-如果程序自动改用了其他端口，请把 URL 中的 `8765` 换成启动窗口显示的实际端口。便携包已包含 `voice-hub-tts` Skill，支持 Skills 扩展的 Agent 可以扫描导入。MCP 只适合本机或受控私有通道，不要把该端口直接开放到公网。
+如果程序自动改用了其他端口，请把 URL 中的 `8765` 换成启动窗口显示的实际端口。使用客户端支持的 Skill 导入方式；具体资源是否随包提供以该 Release 为准，技能文件也可从仓库获取。MCP 没有独立身份认证，WebUI 密码不保护它，只适合本机或受控私有通道，不要把该端口直接开放到公网。
 
 ## 数据位置
 
-数据库、生成音频和网关配置保存在程序目录的 `data` 文件夹。自动更新会保留这个文件夹；手动升级时也请保留它。卸载时可以直接删除整个程序目录。
+数据库、生成音频、WebUI 密码哈希、网关和插件配置保存在程序目录的 `data` 文件夹。自动更新会保留它，手动升级时也请保留。备份时先停止服务，再完整复制 `data`；删除程序目录会删除这些数据。
 
 厂商 API Key、火山引擎 AK/SK 仍保存在当前 Windows 用户的 Credential Manager 中，不会写入程序目录。
 
@@ -56,5 +57,5 @@ http://127.0.0.1:8765/mcp
 - 如果默认端口 `8765` 被占用，程序会自动尝试 `8766` 至 `8790`。
 - 需要查看完整诊断时，在 PowerShell 中运行 `.\VoiceHub.exe --check`。
 
-完整项目文档请查看 `README.md`。
+完整文档见 [项目主页](https://github.com/RainyHorizon/voice-hub) 和 [使用指南](https://github.com/RainyHorizon/voice-hub/blob/main/docs/USAGE.md)。当前源码说明可能与已安装 Release 有差异，以该版本发布说明为准。
 
