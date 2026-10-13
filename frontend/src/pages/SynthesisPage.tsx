@@ -9,16 +9,14 @@ import {
 import { ExclusiveAudio } from "../components/ExclusiveAudio";
 import { WorkspaceHero } from "../components/WorkspaceHero";
 import { useStudio } from "../context/StudioContext";
-import { credentialProviderIds, providerMeta, sample, voiceMatchesModel } from "../utils";
+import { providerInfo, sample, voiceMatchesModel } from "../utils";
 
 export function SynthesisPage() {
   const p = useStudio();
   const synthesisModels = p.models.filter((item) =>
     item.operations.includes("synthesis"),
   );
-  const synthesisProviderIds = ["demo", ...credentialProviderIds].filter((id) =>
-    synthesisModels.some((item) => item.provider === id),
-  );
+  const synthesisProviderIds = [...new Set(synthesisModels.map((m) => m.provider))];
   const selectedProvider =
     p.selectedModel?.provider || synthesisModels[0]?.provider || "";
   const providerModels = synthesisModels.filter(
@@ -50,7 +48,7 @@ export function SynthesisPage() {
     <section className="synthesis-workspace">
       <WorkspaceHero
         title="把文字变成"
-        accent="可听见的质感。"
+        accent="可听见的质感"
         description="输入一段文字，选择合适的厂商、模型与音色，生成自然流畅的语音。"
       />
       <div className="synthesis-layout">
@@ -84,7 +82,7 @@ export function SynthesisPage() {
           </div>
           <div>
             <span>调用方式</span>
-            <strong>{p.selectedModel?.mode === "demo" ? "本地演示" : "厂商 API"}</strong>
+            <strong>{p.selectedModel?.plugin_id ? "插件服务" : p.selectedModel?.mode === "demo" ? "本地演示" : "厂商 API"}</strong>
           </div>
           <div>
             <span>输出</span>
@@ -96,20 +94,20 @@ export function SynthesisPage() {
         <h3 id="synthesis-settings-title"><Settings2 size={18} />设置</h3>
         <div className="synthesis-settings-grid">
           <label>服务来源<select value={selectedProvider} onChange={(event) => chooseProvider(event.target.value)}>
-            {synthesisProviderIds.map((id) => <option value={id} key={id}>{providerMeta[id].label}</option>)}
+            {synthesisProviderIds.map((id) => <option value={id} key={id}>{providerInfo(id, p.models).label}</option>)}
           </select></label>
           <div className="synthesis-model-field">
             <label>模型<select value={p.model} onChange={(event) => p.setModel(event.target.value)}>
               {providerModels.map((item) => <option value={item.gateway_id} key={item.gateway_id}>{item.display_name}</option>)}
             </select></label>
-            {p.selectedModel && <div className="model-meta"><span className={`provider-mark ${providerMeta[p.selectedModel.provider]?.tone}`}>{providerMeta[p.selectedModel.provider]?.mark}</span><div><strong>{p.selectedModel.quality}质感</strong><small>{p.selectedModel.latency}响应 · {p.selectedModel.mode === "demo" ? "本地演示" : "厂商接口"}</small></div></div>}
+            {p.selectedModel && <div className="model-meta"><span className={`provider-mark ${providerInfo(p.selectedModel.provider, p.models).tone}`}>{providerInfo(p.selectedModel.provider, p.models).mark}</span><div><strong>{p.selectedModel.quality}质感</strong><small>{p.selectedModel.latency}响应 · {p.selectedModel.plugin_id ? "插件服务" : p.selectedModel.mode === "demo" ? "本地演示" : "厂商接口"}</small></div></div>}
           </div>
           <div className="synthesis-voice-field">
             <label>音色<select value={selectedVoiceValue} onChange={(event) => p.setVoice(event.target.value)} disabled={!compatibleVoices.length}>
               {!compatibleVoices.length && <option value="">请先创建或导入兼容音色</option>}
               {compatibleVoices.map((item) => <option value={item.public_name} key={item.id}>{item.display_name} · {item.public_name}</option>)}
             </select></label>
-            <button className="inline-action" type="button" onClick={() => p.setActive("clone")}><Plus size={15} />创建或克隆音色</button>
+            {!p.selectedModel?.plugin_id && <button className="inline-action" type="button" onClick={() => p.setActive("clone")}><Plus size={15} />创建或克隆音色</button>}
           </div>
           {(p.selectedModel?.model_id === "qwen3-tts-instruct-flash" || p.selectedModel?.model_id === "seed-tts-2.0") && (
             <label className="synthesis-instruction-field">表达指令<input value={p.instructions} onChange={(event) => p.setInstructions(event.target.value)} placeholder="例如：温暖、克制，结尾轻微上扬" /></label>
@@ -126,7 +124,7 @@ export function SynthesisPage() {
             <div className="segmented">{["wav", "mp3"].map((item) => <button className={p.format === item ? "selected" : ""} type="button" onClick={() => p.setFormat(item)} key={item}>{item.toUpperCase()}</button>)}</div>
           </div>
         </div>
-        <div className="control-note"><Gauge size={16} /><span>{p.selectedModel?.mode === "demo" ? "本地演示无需配置厂商凭据，可直接生成测试音频。" : "当前模型会调用已保存的厂商凭据，结果来自对应厂商的语音服务。"}</span></div>
+        <div className="control-note"><Gauge size={16} /><span>{p.selectedModel?.plugin_id ? "使用插件中的语音配置；音调与音量可在左侧插件页面中调整。Edge TTS 生成需要联网。" : p.selectedModel?.mode === "demo" ? "本地演示无需配置厂商凭据，可直接生成测试音频。" : "当前模型会调用已保存的厂商凭据，结果来自对应厂商的语音服务。"}</span></div>
       </section>
       <div className="generate-row">
         <button className="primary-button" onClick={() => void p.synthesize()} disabled={p.busy || !selectedVoiceValue}><Sparkles size={17} />{p.busy ? "生成中..." : "生成语音"}</button>

@@ -25,7 +25,7 @@ import type {
   ProviderProject,
   Voice,
 } from "../types";
-import { credentialProviderIds, providerMeta } from "../utils";
+import { credentialProviderIds, providerInfo, providerMeta } from "../utils";
 
 export function VoicesPage() {
   const {
@@ -60,8 +60,9 @@ export function VoicesPage() {
   const filtered = provider === "all"
     ? scoped
     : scoped.filter((item) => item.provider === provider);
+  const sourceIds = [...new Set([...credentialProviderIds, ...models.filter((m) => m.plugin_id).map((m) => m.provider)])];
   const counts = Object.fromEntries(
-    credentialProviderIds.map((id) => [
+    sourceIds.map((id) => [
       id,
       scoped.filter((item) => item.provider === id).length,
     ]),
@@ -72,7 +73,7 @@ export function VoicesPage() {
         <div>
           <WorkspaceHero
             title="让每一个声音"
-            accent="都有自己的位置。"
+            accent="都有自己的位置"
             description="浏览预置、克隆、导入和设计音色，并按来源快速筛选。"
           />
         </div>
@@ -101,11 +102,11 @@ export function VoicesPage() {
         onChange={setProvider}
         options={[
           { id: "all", label: "全部厂商", mark: "全", tone: "gray", detail: `${scoped.length} 个音色` },
-          ...credentialProviderIds.map((id) => ({
+          ...sourceIds.map((id) => ({
             id,
-            label: providerMeta[id].label,
-            mark: providerMeta[id].mark,
-            tone: providerMeta[id].tone,
+            label: providerInfo(id, models).label,
+            mark: providerInfo(id, models).mark,
+            tone: providerInfo(id, models).tone,
             detail: `${counts[id] || 0} 个音色`,
           })),
         ]}
@@ -136,7 +137,7 @@ export function VoicesPage() {
                 </div>
                 <strong title={item.display_name}>{item.display_name}</strong>
               </div>
-              <div className="voice-api-id">
+              <div className="voice-api-id notranslate" translate="no">
                 <code title={apiVoiceId}>{apiVoiceId}</code>
                 <button
                   className="voice-id-copy"
@@ -148,10 +149,10 @@ export function VoicesPage() {
                   {copiedId === `voice:${item.id}` ? <Check size={14} /> : <Copy size={14} />}
                 </button>
               </div>
-              <div className="voice-model">
+              <div className="voice-model notranslate" translate="no">
                 <strong title={model?.display_name || item.model_id}>{model?.display_name || item.model_id}</strong>
               </div>
-              <div className="voice-model-id">
+              <div className="voice-model-id notranslate" translate="no">
                 <code title={item.model_id}>{item.model_id}</code>
                 <button
                   className="voice-id-copy"
@@ -183,14 +184,14 @@ export function VoicesPage() {
                 >
                   <Pencil size={16} />
                 </button> : <span className="voice-action-placeholder" aria-hidden="true" />}
-                <button
+                {!item.plugin_id && <button
                   className="icon-button delete-voice"
                   title="从音色库移除"
                   aria-label={`从音色库移除 ${item.display_name}`}
                   onClick={() => void removeVoice(item)}
                 >
                   <Trash2 size={16} />
-                </button>
+                </button>}
               </div>
             </div>
             );

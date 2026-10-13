@@ -41,6 +41,7 @@ flowchart LR
 | `backend/tests/conftest.py` | pytest 临时根目录、凭据环境清理和外网访问拦截 |
 | `voicehub.cmd` | Windows 源码、轻量版和便携版共用的 CLI 启动入口 |
 | `skills/voice-hub-tts/` | 供 Agent 扫描或本地安装的 Voice Hub CLI/MCP 决策 Skill |
+| `data/plugins/` | 可选外部语音插件目录；插件清单由 `app.plugins` 校验，不在本体进程内导入第三方代码 |
 | `data/voice_studio.db` | 任务、音色、厂商账号元数据；不保存完整 API Key |
 | `data/audio/` | 生成音频、参考音频和设计试听文件 |
 | `data/logs/` | 启动器和运行时日志；升级时与其他用户数据一并保留 |
@@ -100,6 +101,8 @@ sequenceDiagram
 4. 在前端模型选择和设置页面补充显示信息。
 
 适配器应将厂商错误转换为 `ProviderError`，避免把密钥、完整上游响应或内部路径写入用户可见错误。
+
+外部插件采用 `external_http` 运行时。Voice Hub 扫描 `voice-hub.plugin.json`，校验服务身份、模型与音色目录，保存声明式配置并调用独立服务进行合成；预置音色使用虚拟记录，不写入核心音色数据库。插件服务与本体进程分离，第三方依赖不进入核心 Python 环境；当前仅支持数字环回 HTTP 服务，暂无任意前端脚本、第三方自动下载或自动更新。协议细节见 `docs/PLUGIN_DEVELOPMENT.md`。
 
 ## 测试隔离
 

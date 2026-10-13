@@ -12,6 +12,8 @@ export const providerMeta: Record<
 };
 
 export const credentialProviderIds = ["dashscope", "volcengine", "minimax", "mimo"];
+export const providerInfo = (id: string, models: Model[]) =>
+  providerMeta[id] || { label: models.find((m) => m.provider === id)?.provider_display_name || id, mark: "P", tone: "blue" };
 
 export const apiTestModels = (models: Model[]) =>
   models.filter(
@@ -49,6 +51,7 @@ export function titleFor(active: string) {
       design: "语音设计",
       gateway: "OpenAI 兼容网关",
       history: "任务历史",
+      plugins: "插件",
       settings: "设置",
     } as Record<string, string>
   )[active];

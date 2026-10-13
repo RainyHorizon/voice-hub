@@ -317,7 +317,7 @@ export function HistoryPage() {
       <header className="workspace-sticky-header">
         <WorkspaceHero
           title="每一次生成"
-          accent="都留下可追溯的声音。"
+          accent="都留下可追溯的声音"
           description="按日期浏览生成任务，试听、下载文字记录与音频，或批量整理历史文件。"
         />
         <div className="history-command-bar">

@@ -54,6 +54,7 @@ type StudioContextValue = {
   selectedModel?: Model;
   selectedVoice?: Voice;
   refreshJobs: () => Promise<void>;
+  refreshCatalog: () => Promise<void>;
   synthesize: () => Promise<void>;
   importVoice: (config: ImportVoiceConfig) => Promise<void>;
   importVoices: (configs: ImportVoiceConfig[]) => Promise<void>;
@@ -229,12 +230,17 @@ export function StudioProvider({ children }: { children: ReactNode }) {
   );
   useEffect(() => () => synthesisAbortRef.current?.abort(), []);
   useEffect(() => {
-    const firstCompatible = voices.find((item) =>
-      voiceMatchesModel(item, selectedModel),
-    );
+    const compatible = voices.filter((item) => voiceMatchesModel(item, selectedModel));
+    const firstCompatible = compatible.find((item) => item.provider_voice_id === selectedModel?.default_voice) || compatible[0];
     if (firstCompatible && !voiceMatchesModel(selectedVoice, selectedModel))
       setVoice(firstCompatible.public_name);
   }, [selectedModel, selectedVoice, voices]);
+  const refreshCatalog = async () => {
+    const [nextModels, nextVoices] = await Promise.all([api<Model[]>("/api/models"), api<Voice[]>("/api/voices")]);
+    setModels(nextModels);
+    setVoices(nextVoices);
+    setModel((current) => nextModels.some((m) => m.gateway_id === current) ? current : (nextModels.find((m) => m.operations.includes("synthesis"))?.gateway_id || ""));
+  };
   const refreshJobs = () =>
     api<Job[]>("/api/jobs?limit=500")
       .then(setJobs)
@@ -251,7 +257,7 @@ export function StudioProvider({ children }: { children: ReactNode }) {
     const requestId = ++synthesisRequestRef.current;
     setBusy(true);
     notify(
-      selectedModel?.mode === "provider"
+      selectedModel.plugin_id ? "正在通过插件生成音频…" : selectedModel?.mode === "provider"
         ? "正在调用厂商接口生成音频…"
         : "正在生成演示音频…",
       "loading",
@@ -454,6 +460,7 @@ export function StudioProvider({ children }: { children: ReactNode }) {
     selectedModel,
     selectedVoice,
     refreshJobs,
+    refreshCatalog,
     synthesize,
     importVoice,
     importVoices,

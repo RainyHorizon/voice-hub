@@ -21,6 +21,7 @@ from .credentials import (
     load_provider_credentials,
 )
 from .database import db
+from .plugins import plugin_models, plugin_voices
 from .providers.base import ProviderError
 from .providers.demo import DemoProvider
 from .providers.mimo import MIMO_MODELS, MiMoProvider
@@ -32,7 +33,7 @@ demo_provider = DemoProvider()
 
 
 def available_models():
-    return [*demo_provider.models(), *QWEN_MODELS, *VOLCENGINE_MODELS, *MINIMAX_MODELS, *MIMO_MODELS]
+    return [*demo_provider.models(), *QWEN_MODELS, *VOLCENGINE_MODELS, *MINIMAX_MODELS, *MIMO_MODELS, *plugin_models()]
 
 
 def resolve_model(model_id: str):
@@ -82,6 +83,9 @@ def openai_model_item(model, requested_id: str | None = None) -> dict[str, Any]:
 
 
 def resolve_voice(voice_id: str, model):
+    if model.plugin_id:
+        return next((v for v in plugin_voices() if v["provider"] == model.provider and v["model_id"] == model.model_id
+                     and voice_id in {v["id"], v["public_name"], v["provider_voice_id"]}), None)
     if model.provider == "mimo" and model.model_id == "mimo-v2.5-tts":
         aliases = {"alloy": "mimo-default", "coral": "bingtang", "nova": "suda", "shimmer": "moli"}
     elif model.provider == "dashscope" and model.model_id == "qwen3-tts-flash":
@@ -189,6 +193,9 @@ def provider_for(
     *,
     require_project_api_key: bool = True,
 ):
+    if model_provider.startswith("plugin-"):
+        from .providers.external import ExternalProvider
+        return ExternalProvider(model_provider.removeprefix("plugin-"))
     if model_provider not in {"dashscope", "mimo", "volcengine", "minimax"}:
         return demo_provider
     row = provider_account_for(model_provider, account_id)

@@ -213,6 +213,7 @@ app.include_router(routers.voices.router)
 app.include_router(routers.gateway.router)
 app.include_router(routers.jobs.router)
 app.include_router(routers.storage.router)
+app.include_router(routers.plugins.router)
 
 if config.MCP_ENABLED:
     from .mcp_server import mcp_http_app

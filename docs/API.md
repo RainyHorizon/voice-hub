@@ -7,6 +7,22 @@ Voice Hub 默认在本机 `http://127.0.0.1:8765` 提供管理 API 和 OpenAI �
 
 ## 鉴权
 
+插件管理接口沿用 WebUI 会话认证，不能使用网关 Key 代替管理密码：
+
+| 路径 | 用途 |
+| --- | --- |
+| GET /api/plugins | 已安装清单、状态、配置与音色数量 |
+| GET /api/plugins/market | 可选示例列表，当前不连接公共市场 |
+| POST /api/plugins/refresh | 重新扫描本机清单 |
+| POST /api/plugins/{id}/install | 安装本机可用的已知示例；没有随本次核心仓库提交示例服务 |
+| POST /api/plugins/{id}/enable、disable | 验证连接并启用，或停用 |
+| POST /api/plugins/{id}/refresh | 同步模型与音色目录 |
+| POST /api/plugins/{id}/check | JSON `{"config":{...}}`，只检查连接，不保存 |
+| PUT /api/plugins/{id}/config | JSON `{"config":{...}}`，校验并保存配置 |
+| DELETE /api/plugins/{id} | 卸载注册，保留音频与服务文件 |
+
+插件 HTTP 协议、服务启动与卸载备份说明见 [插件开发文档](PLUGIN_DEVELOPMENT.md)。
+
 ### WebUI 管理密码
 
 WebUI 管理接口默认启用单用户密码。首次打开网页时调用 `GET /api/auth/status`，如果尚未设置密码，网页会显示创建密码页面；已有密码时需要先登录。登录成功后服务端通过 HttpOnly、SameSite Cookie 维持会话，密码只以 PBKDF2-SHA256 哈希形式保存在 SQLite 中。

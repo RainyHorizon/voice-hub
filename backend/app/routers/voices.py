@@ -13,6 +13,7 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
 from .. import config
+from ..plugins import plugin_voices
 from ..database import db, now
 from ..providers.base import ProviderError, SynthesisRequest
 from ..providers.minimax import MiniMaxProvider
@@ -47,7 +48,7 @@ def list_voices():
             "preview_url": f"/api/voices/{row['id']}/preview" if row["preview_asset"] else None,
         }
         for row in rows
-    ]
+    ] + plugin_voices()
 
 
 def voice_already_imported(

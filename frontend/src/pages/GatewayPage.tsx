@@ -30,7 +30,7 @@ import { GatewayAgentSkills } from "../components/GatewayAgentSkills";
 import { handleTabListKeyDown } from "../components/tabs";
 import { useStudio } from "../context/StudioContext";
 import type { GatewayStats } from "../types";
-import { apiTestModels, credentialProviderIds, providerMeta, voiceMatchesModel } from "../utils";
+import { apiTestModels, credentialProviderIds, providerInfo, voiceMatchesModel } from "../utils";
 
 type GatewayTestResult = {
   status: "idle" | "running" | "success" | "error" | "cancelled";
@@ -365,7 +365,8 @@ export function GatewayPage() {
         : "尚未检查模型目录";
   const displayedTest = streamTest.status !== "idle" ? streamTest : speechTest;
   const formatLatency = (value: number | null) => value === null ? "--" : `${value}ms`;
-  const statsProviderLabel = (id: string) => providerMeta[id]?.label || id;
+  const statsSources = [...new Set([...credentialProviderIds, ...models.filter((m) => m.plugin_id).map((m) => m.provider)])];
+  const statsProviderLabel = (id: string) => providerInfo(id, models).label;
   const endpointDocs = [
     {
       id: "models",
@@ -403,7 +404,7 @@ export function GatewayPage() {
       <header className="gateway-header workspace-sticky-header">
         <WorkspaceHero
           title="把 Voice Hub"
-          accent="接入你的应用。"
+          accent="接入你的应用"
           description="使用 OpenAI 兼容接口调用四家语音模型。外部应用只需要 Base URL 和网关 Key，厂商凭据始终留在本机后端。"
         />
       </header>
@@ -529,7 +530,7 @@ export function GatewayPage() {
             </div>
             <select value={statsProvider} onChange={(event) => setStatsProvider(event.target.value)} aria-label="筛选统计来源">
               <option value="">全部来源</option>
-              {credentialProviderIds.map((id) => <option value={id} key={id}>{providerMeta[id].label}</option>)}
+              {statsSources.map((id) => <option value={id} key={id}>{statsProviderLabel(id)}</option>)}
             </select>
             <button className="icon-button" onClick={() => refreshStats()} title="刷新统计" disabled={statsLoading}>
               <RefreshCw size={15} className={statsLoading ? "spinning" : ""} />
@@ -591,10 +592,10 @@ export function GatewayPage() {
           <div className="test-request">
             <div className="test-field-row">
               <label>模型<select value={testModel} onChange={(event) => selectTestModel(event.target.value)}>
-                {credentialProviderIds.map((provider) => {
+                {statsSources.map((provider) => {
                   const items = testableModels.filter((item) => item.provider === provider);
                   if (!items.length) return null;
-                  return <optgroup label={providerMeta[provider].label} key={provider}>{items.map((item) => <option value={item.gateway_id} key={item.gateway_id}>{item.display_name}</option>)}</optgroup>;
+                  return <optgroup label={statsProviderLabel(provider)} key={provider}>{items.map((item) => <option value={item.gateway_id} key={item.gateway_id}>{item.display_name}</option>)}</optgroup>;
                 })}
               </select><small className="test-field-id"><span>API ID</span><code>{selectedTestModel?.gateway_id || "未选择模型"}</code></small></label>
               <label>音色<select value={testVoice} onChange={(event) => setTestVoice(event.target.value)} disabled={!compatibleVoices.length}>
@@ -610,7 +611,7 @@ export function GatewayPage() {
                 ? <button className="secondary-button compact" onClick={cancelStream}><X size={15} />取消流式</button>
                 : <button className="secondary-button compact" onClick={testStream} disabled={speechTest.status === "running" || !key || !testModel || !compatibleVoices.length}><Radio size={15} />测试流式{selectedTestModel?.provider === "mimo" ? " · PCM" : ""}</button>}
             </div>
-            {selectedTestModel && <div className="test-model-note"><span className={"provider-mark " + providerMeta[selectedTestModel.provider]?.tone}>{providerMeta[selectedTestModel.provider]?.mark}</span><span><strong>{selectedTestModel.display_name}</strong><small>厂商接口 · {compatibleVoices.length} 个兼容音色</small></span></div>}
+            {selectedTestModel && <div className="test-model-note"><span className={"provider-mark " + providerInfo(selectedTestModel.provider, models).tone}>{providerInfo(selectedTestModel.provider, models).mark}</span><span><strong>{selectedTestModel.display_name}</strong><small>{selectedTestModel.plugin_id ? "插件服务" : "厂商接口"} · {compatibleVoices.length} 个兼容音色</small></span></div>}
             <div className="offline-diagnostic">
               <div><strong>本地离线诊断</strong><small>使用 demo/local-demo 检查网关和音频返回，不调用厂商接口。</small></div>
               <button className="secondary-button compact" onClick={testOfflineDemo} disabled={speechTest.status === "running" || streamTest.status === "running" || !key || !demoModel || !demoVoice}><FlaskConical size={15} />运行诊断</button>

@@ -223,7 +223,7 @@ export function ClonePage() {
     <section className="page-section clone-page">
       <WorkspaceHero
         title="让一个真实的声音"
-        accent="留下它的纹理。"
+        accent="留下它的纹理"
         description="上传参考音频，选择目标厂商和模型，创建一个可以在语音合成中复用的声音。"
       />
       <div className="clone-form">

@@ -49,7 +49,7 @@ export function SettingsPage() {
       <header className="workspace-sticky-header">
         <WorkspaceHero
           title="把每个厂商"
-          accent="放进同一个工作台。"
+          accent="放进同一个工作台"
           description="统一管理厂商凭据、生成文件存储策略和本机运行环境。"
         />
         <div className="settings-navigation" role="tablist" aria-label="设置分类" onKeyDown={handleTabListKeyDown}>

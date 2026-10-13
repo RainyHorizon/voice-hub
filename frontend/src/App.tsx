@@ -1,11 +1,14 @@
 import {
   AudioLines,
+  ArrowUpRight,
   ChevronLeft,
   ChevronRight,
   Clock3,
   Code2,
+  Github,
   Library,
   Mic2,
+  Puzzle,
   Settings2,
   WandSparkles,
 } from "lucide-react";
@@ -13,6 +16,7 @@ import { useEffect, useState, type ComponentType, type ReactNode } from "react";
 import { Toaster } from "sonner";
 import { ConfirmProvider } from "./components/feedback/ConfirmProvider";
 import { AuthScreen } from "./components/AuthScreen";
+import { PluginSettings } from "./components/PluginSettings";
 import { StudioProvider, useStudio } from "./context/StudioContext";
 import { api } from "./api";
 import { ClonePage } from "./pages/ClonePage";
@@ -32,6 +36,7 @@ const nav = [
   { id: "design", label: "语音设计", icon: WandSparkles },
   { id: "gateway", label: "API 网关", icon: Code2 },
   { id: "history", label: "任务历史", icon: Clock3 },
+  { id: "plugins", label: "插件", icon: Puzzle },
   { id: "settings", label: "设置", icon: Settings2 },
 ];
 
@@ -42,6 +47,7 @@ const pages: Record<string, ComponentType> = {
   design: DesignPage,
   gateway: GatewayPage,
   history: HistoryPage,
+  plugins: PluginSettings,
   settings: SettingsPage,
 };
 
@@ -103,6 +109,18 @@ function AppShell() {
             );
           })}
         </nav>
+        <a
+          className="nav-item sidebar-repository"
+          href="https://github.com/RainyHorizon/voice-hub"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="GitHub 仓库（在新标签页打开）"
+          aria-label="GitHub 仓库（在新标签页打开）"
+        >
+          <Github size={17} />
+          <span>GitHub 仓库</span>
+          <ArrowUpRight size={15} className="nav-arrow" />
+        </a>
       </aside>
       <main className="main-area">
         <header className="topbar visually-hidden">

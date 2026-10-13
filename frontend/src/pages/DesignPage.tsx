@@ -65,7 +65,7 @@ export function DesignPage() {
     <section className="page-section design-page">
       <div className="design-hero">
         <div>
-          <h2>先写下声音的性格，<br /><em>再让它开口。</em></h2>
+          <h2>先写下声音的性格，<br /><em>再让它开口</em></h2>
           <p>不需要参考音频。用自然语言描述年龄、质感、语速和情绪，创建一枚可以复用的设计音色。</p>
         </div>
       </div>

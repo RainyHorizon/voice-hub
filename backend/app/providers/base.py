@@ -24,6 +24,9 @@ class ProviderModel:
     design_prompt_max: int | None = None
     design_preview_min: int | None = None
     design_preview_max: int | None = None
+    plugin_id: str | None = None
+    provider_display_name: str | None = None
+    default_voice: str | None = None
 
     @property
     def gateway_id(self) -> str:

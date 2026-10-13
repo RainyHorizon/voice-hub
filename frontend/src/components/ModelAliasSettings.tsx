@@ -3,7 +3,7 @@ import { Check, RefreshCw, RotateCcw, Save, ShieldCheck } from "lucide-react";
 import { api } from "../api";
 import { useConfirm } from "./feedback/ConfirmProvider";
 import type { GatewayAlias, Model } from "../types";
-import { providerMeta } from "../utils";
+import { providerInfo } from "../utils";
 
 const aliasMeta: Record<GatewayAlias["alias"], { label: string; description: string; tone: string }> = {
   "tts-default": { label: "通用默认", description: "日常使用的平衡选择", tone: "default" },
@@ -33,11 +33,11 @@ export function ModelAliasSettings({
   );
   const modelGroups = useMemo(
     () => synthesisModels.reduce<Record<string, Model[]>>((groups, model) => {
-      const provider = providerMeta[model.provider]?.label || model.provider;
+      const provider = providerInfo(model.provider, models).label;
       (groups[provider] ||= []).push(model);
       return groups;
     }, {}),
-    [synthesisModels],
+    [synthesisModels, models],
   );
 
   const applyAliases = (next: GatewayAlias[]) => {
@@ -155,7 +155,7 @@ export function ModelAliasSettings({
                 </select>
               </label>
               <div className="model-alias-current">
-                <span>{selectedModel ? providerMeta[selectedModel.provider]?.label || selectedModel.provider : "当前模型"}</span>
+                <span>{selectedModel ? providerInfo(selectedModel.provider, models).label : "当前模型"}</span>
                 <code title={selected}>{selected}</code>
               </div>
               <button className="primary-button compact model-alias-save" type="button" disabled={Boolean(savingName) || !dirty} onClick={() => void save(item)}>

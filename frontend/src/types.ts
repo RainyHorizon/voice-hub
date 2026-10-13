@@ -1,4 +1,5 @@
 export type Voice = {
+  plugin_id?: string;
   id: string;
   provider: string;
   model_id: string;
@@ -15,6 +16,9 @@ export type Voice = {
   provider_voice_id?: string | null;
 };
 export type Model = {
+  plugin_id?: string | null;
+  provider_display_name?: string | null;
+  default_voice?: string | null;
   provider: string;
   model_id: string;
   gateway_id: string;
@@ -200,6 +204,36 @@ export type ProviderAccount = {
   openapi_access_key_hint?: string;
   has_openapi_secret?: boolean;
   project_count?: number;
+};
+export type VoiceHubPlugin = {
+  settings?: PluginSetting[];
+  config?: Record<string, string | number | boolean>;
+  voices?: { id: string; name: string; model: string; languages: string[] }[];
+  model_count?: number;
+  voice_count?: number;
+  id: string;
+  name?: string;
+  version?: string;
+  api_version?: string;
+  description?: string;
+  author?: string;
+  homepage?: string | null;
+  runtime?: string;
+  endpoint?: string | null;
+  capabilities?: string[];
+  status: "enabled" | "disabled" | "invalid";
+  enabled: boolean;
+  error?: string;
+  path?: string;
+};
+export type PluginSetting = {
+  key: string;
+  label: string;
+  description: string;
+  type: "string" | "integer" | "boolean" | "voice";
+  default: string | number | boolean;
+  minimum?: number | null;
+  maximum?: number | null;
 };
 export type ProviderProject = {
   id: string;
